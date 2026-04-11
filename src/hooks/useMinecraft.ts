@@ -9,7 +9,7 @@ import { usePlayer } from './usePlayer';
 import { useInteraction } from './useInteraction';
 import { useWorld } from './useWorld';
 
-export const useMinecraft = (currentBlockType: number) => {
+export const useMinecraft = (currentBlockType: number, targetFps: number = 144) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
@@ -17,9 +17,15 @@ export const useMinecraft = (currentBlockType: number) => {
   const lastFpsUpdate = useRef(performance.now());
   
   const currentBlockTypeRef = useRef(currentBlockType);
+  const targetFpsRef = useRef(targetFps);
+
   useEffect(() => {
     currentBlockTypeRef.current = currentBlockType;
   }, [currentBlockType]);
+
+  useEffect(() => {
+    targetFpsRef.current = targetFps;
+  }, [targetFps]);
   
   // Three.js Core Refs
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -33,6 +39,7 @@ export const useMinecraft = (currentBlockType: number) => {
   const materialsRef = useRef<Record<number, THREE.Material | THREE.Material[]>>({});
   const blockGeometryRef = useRef(new THREE.BoxGeometry(1, 1, 1));
   const prevTime = useRef(performance.now());
+  const lastRenderTime = useRef(performance.now());
 
   // Initialize World Hook (Manages Chunks and Blocks)
   const world = useWorld(sceneRef, materialsRef, blockGeometryRef);
@@ -101,9 +108,19 @@ export const useMinecraft = (currentBlockType: number) => {
     const animate = () => {
       animationId = requestAnimationFrame(animate);
       const time = performance.now();
+      
+      // FPS Capping Logic
+      const interval = 1000 / targetFpsRef.current;
+      const elapsed = time - lastRenderTime.current;
+      
+      if (elapsed < interval) return;
+      
+      // Update lastRenderTime to the start of this frame (with drift compensation)
+      lastRenderTime.current = time - (elapsed % interval);
+
       const delta = Math.min((time - prevTime.current) / 1000, 0.1);
 
-      // FPS Tracking
+      // FPS Tracking (For UI display)
       frameCount.current++;
       if (time - lastFpsUpdate.current > 1000) {
         setFps(Math.round((frameCount.current * 1000) / (time - lastFpsUpdate.current)));

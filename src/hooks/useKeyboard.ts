@@ -25,6 +25,9 @@ const actionMap: Record<string, string> = {
   '4': 'digit4',
   Digit5: 'digit5',
   '5': 'digit5',
+  KeyP: 'menu',
+  p: 'menu',
+  Escape: 'menu',
 };
 
 export const useKeyboard = () => {
@@ -39,6 +42,7 @@ export const useKeyboard = () => {
     digit3: false,
     digit4: false,
     digit5: false,
+    menu: false,
   });
 
   const actionsRef = useRef(actions);
