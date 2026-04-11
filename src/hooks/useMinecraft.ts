@@ -119,32 +119,10 @@ export const useMinecraft = (currentBlockType: number) => {
     generateWorld(30, addBlock, treeGen);
 
     // Event Listeners
-    const onKeyDown = (event: KeyboardEvent) => {
-      const code = event.code;
-      const key = event.key.toLowerCase();
-      if (code === 'KeyW' || code === 'ArrowUp' || key === 'w') player.moveForward.current = true;
-      if (code === 'KeyA' || code === 'ArrowLeft' || key === 'a') player.moveLeft.current = true;
-      if (code === 'KeyS' || code === 'ArrowDown' || key === 's') player.moveBackward.current = true;
-      if (code === 'KeyD' || code === 'ArrowRight' || key === 'd') player.moveRight.current = true;
-      if (code === 'Space' || key === ' ') {
-        if (player.canJump.current) player.velocity.current.y += 8;
-        player.canJump.current = false;
-      }
-    };
-
-    const onKeyUp = (event: KeyboardEvent) => {
-      const code = event.code;
-      const key = event.key.toLowerCase();
-      if (code === 'KeyW' || code === 'ArrowUp' || key === 'w') player.moveForward.current = false;
-      if (code === 'KeyA' || code === 'ArrowLeft' || key === 'a') player.moveLeft.current = false;
-      if (code === 'KeyS' || code === 'ArrowDown' || key === 's') player.moveBackward.current = false;
-      if (code === 'KeyD' || code === 'ArrowRight' || key === 'd') player.moveRight.current = false;
-    };
+    // Event Listeners (Keyboard handled by usePlayer)
 
     const handleMouseDown = (e: MouseEvent) => interaction.handleMouseDown(e);
 
-    globalThis.addEventListener('keydown', onKeyDown);
-    globalThis.addEventListener('keyup', onKeyUp);
     document.addEventListener('mousedown', handleMouseDown);
 
     // Animation Loop
@@ -174,8 +152,6 @@ export const useMinecraft = (currentBlockType: number) => {
     return () => {
       cancelAnimationFrame(animationId);
       globalThis.removeEventListener('resize', onResize);
-      globalThis.removeEventListener('keydown', onKeyDown);
-      globalThis.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('mousedown', handleMouseDown);
       controls.removeEventListener('lock', onLock);
       controls.removeEventListener('unlock', onUnlock);

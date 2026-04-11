@@ -16,72 +16,10 @@ body {
   user-select: none;
 }
 
-#ui-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  z-index: 10;
-}
+/* UI layer styles moved to HUD.css */
 
-.game-mount {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-}
+/* Game mount styles moved to GameCanvas.css */
 
-/* Crosshair styles moved to Crosshair.css */
-
-/* Pantalla de Inicio / Pausa */
-#blocker {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  pointer-events: auto;
-  cursor: pointer;
-  z-index: 20;
-  /* Button resets */
-  border: none;
-  padding: 0;
-  margin: 0;
-  font-family: inherit;
-  color: inherit;
-  outline: none;
-}
-
-#instructions {
-  background-color: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 40px;
-  border-radius: 10px;
-  text-align: center;
-  border: 2px solid #555;
-}
-
-#instructions h1 {
-  margin-top: 0;
-  color: #4CAF50;
-}
-
-.key {
-  background: #eee;
-  color: #333;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: bold;
-}
+/* UI elements handled by components (Crosshair, Hotbar, Blocker) */
 
 /* Crosshair and other UI already handled... */
