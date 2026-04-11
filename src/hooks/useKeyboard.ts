@@ -28,6 +28,8 @@ const actionMap: Record<string, string> = {
   KeyP: 'menu',
   p: 'menu',
   Escape: 'menu',
+  ControlLeft: 'sprint',
+  ControlRight: 'sprint',
 };
 
 export const useKeyboard = () => {
@@ -43,14 +45,28 @@ export const useKeyboard = () => {
     digit4: false,
     digit5: false,
     menu: false,
+    sprint: false,
   });
 
   const actionsRef = useRef(actions);
+  const lastWPress = useRef(0);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const action = actionMap[event.code] || actionMap[event.key.toLowerCase()];
+      const code = event.code;
+      const action = actionMap[code] || actionMap[event.key.toLowerCase()];
+      
       if (action) {
+        // Double-tap W logic
+        if (code === 'KeyW' || event.key.toLowerCase() === 'w') {
+          const now = performance.now();
+          if (now - lastWPress.current < 250) {
+             setActions((prev) => ({ ...prev, moveForward: true, sprint: true }));
+             actionsRef.current.sprint = true;
+          }
+          lastWPress.current = now;
+        }
+
         setActions((prev) => {
           const next = { ...prev, [action]: true };
           actionsRef.current = next;
@@ -60,10 +76,21 @@ export const useKeyboard = () => {
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      const action = actionMap[event.code] || actionMap[event.key.toLowerCase()];
+      const code = event.code;
+      const action = actionMap[code] || actionMap[event.key.toLowerCase()];
+
       if (action) {
         setActions((prev) => {
-          const next = { ...prev, [action]: false };
+          // Special case: Don't disable sprint on key up if it's the sprint key (Ctrl)
+          // it stays active until moveForward is released
+          const isSprintKey = action === 'sprint';
+          const next = { ...prev, [action]: isSprintKey ? prev.sprint : false };
+          
+          // If we stop moving forward, we must stop sprinting
+          if (action === 'moveForward') {
+            next.sprint = false;
+          }
+          
           actionsRef.current = next;
           return next;
         });

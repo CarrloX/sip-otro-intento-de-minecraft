@@ -27,6 +27,8 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               value={targetFps} 
               onChange={(e) => onFpsChange(Number(e.target.value))}
               className="option-slider"
+              aria-label="Max FPS"
+              title="Ajustar límite de FPS"
             />
           </div>
         </div>

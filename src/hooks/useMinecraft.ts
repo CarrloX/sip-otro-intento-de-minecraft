@@ -32,7 +32,6 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144) 
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<PointerLockControls | null>(null);
-  const raycasterRef = useRef(new THREE.Raycaster());
   const hoveredBlockRef = useRef<SelectionResult | null>(null);
   
   // Shared Configuration
@@ -133,11 +132,17 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144) 
         player.update(delta, camera, controls);
         world.manageChunks(camera.position);
         hoveredBlockRef.current = updateSelection(
-          raycasterRef.current,
           camera,
-          world.objectsRef.current,
+          world.loadedBlocksRef.current,
           highlighter
         );
+
+        // Standard FOV = 75, Sprinting FOV = 85
+        const targetFov = player.isSprinting.current ? 85 : 75;
+        if (Math.abs(camera.fov - targetFov) > 0.1) {
+          camera.fov += (targetFov - camera.fov) * delta * 8;
+          camera.updateProjectionMatrix();
+        }
       } else {
         highlighter.visible = false;
         hoveredBlockRef.current = null;

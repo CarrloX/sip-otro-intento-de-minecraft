@@ -12,6 +12,7 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>)
   const moveLeft = useRef(false);
   const moveRight = useRef(false);
   const canJump = useRef(false);
+  const isSprintingRef = useRef(false);
 
   const checkCollision = useCallback((pos: THREE.Vector3) => {
     // Minecraft Dimensions: Width 0.6 (0.3 radius), Height 1.8
@@ -53,14 +54,21 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>)
     moveLeft.current = actions.moveLeft;
     moveRight.current = actions.moveRight;
 
+    const isSprinting = actions.sprint && moveForward.current;
+    isSprintingRef.current = isSprinting;
+
     // Physics Sub-stepping logic
     physicsAccumulator.current += delta;
     let substeps = 0;
 
     while (physicsAccumulator.current >= PHYSICS_STEP && substeps < MAX_SUBSTEPS) {
+      const isSprinting = actions.sprint && moveForward.current;
+
       // 1. Handle Jump
       if (actions.jump && canJump.current) {
-        velocity.current.y += 8;
+        // Boost jump if sprinting (1.1x vertical force)
+        const jumpForce = isSprinting ? 8.8 : 8;
+        velocity.current.y += jumpForce;
         canJump.current = false;
       }
 
@@ -74,7 +82,9 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>)
       direction.current.x = Number(moveRight.current) - Number(moveLeft.current);
       direction.current.normalize();
 
-      const speed = 40;
+      const speedMultiplier = isSprinting ? 1.3 : 1.0;
+      const speed = 40 * speedMultiplier;
+      
       if (moveForward.current || moveBackward.current) velocity.current.z -= direction.current.z * speed * PHYSICS_STEP;
       if (moveLeft.current || moveRight.current) velocity.current.x -= direction.current.x * speed * PHYSICS_STEP;
 
@@ -115,6 +125,7 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>)
     moveLeft,
     moveRight,
     canJump,
+    isSprinting: isSprintingRef,
     velocity,
     update
   }), [update]);

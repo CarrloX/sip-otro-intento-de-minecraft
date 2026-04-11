@@ -1,11 +1,9 @@
 import * as THREE from 'three';
 
 export interface SelectionResult {
-  object: THREE.Object3D;
-  instanceId?: number;
   blockPosition: THREE.Vector3;
   face: { normal: THREE.Vector3 } | null;
-  point: THREE.Vector3;
+  distance: number;
 }
 
 export const createHighlighter = () => {
@@ -19,40 +17,82 @@ export const createHighlighter = () => {
   return line;
 };
 
-export const updateSelection = (
-  raycaster: THREE.Raycaster,
-  camera: THREE.PerspectiveCamera,
-  objects: THREE.Object3D[],
-  highlighter: THREE.LineSegments
-): SelectionResult | null => {
-  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-  const intersects = raycaster.intersectObjects(objects, true); // true for recursive (check inside Groups)
+/**
+ * Core DDA Algorithm implementation
+ */
+const performVoxelTraversal = (
+  origin: THREE.Vector3,
+  direction: THREE.Vector3,
+  blocksMap: Map<string, number>,
+  maxDistance: number
+) => {
+  let x = Math.floor(origin.x);
+  let y = Math.floor(origin.y);
+  let z = Math.floor(origin.z);
 
-  if (intersects.length > 0 && intersects[0].distance < 5) {
-    const intersect = intersects[0];
-    
-    // Extract position whether it's a physical Mesh or an InstancedMesh
-    const blockPos = new THREE.Vector3();
-    if (intersect.object instanceof THREE.InstancedMesh && intersect.instanceId !== undefined) {
-      const matrix = new THREE.Matrix4();
-      intersect.object.getMatrixAt(intersect.instanceId, matrix);
-      blockPos.setFromMatrixPosition(matrix);
+  const stepX = direction.x > 0 ? 1 : -1;
+  const stepY = direction.y > 0 ? 1 : -1;
+  const stepZ = direction.z > 0 ? 1 : -1;
+
+  const tDeltaX = Math.abs(1 / direction.x);
+  const tDeltaY = Math.abs(1 / direction.y);
+  const tDeltaZ = Math.abs(1 / direction.z);
+
+  let tMaxX = (stepX > 0 ? (Math.floor(origin.x) + 1 - origin.x) : (origin.x - Math.floor(origin.x))) * tDeltaX;
+  let tMaxY = (stepY > 0 ? (Math.floor(origin.y) + 1 - origin.y) : (origin.y - Math.floor(origin.y))) * tDeltaY;
+  let tMaxZ = (stepZ > 0 ? (Math.floor(origin.z) + 1 - origin.z) : (origin.z - Math.floor(origin.z))) * tDeltaZ;
+
+  let normal = new THREE.Vector3();
+  let distance = 0;
+
+  while (distance < maxDistance) {
+    if (tMaxX < tMaxY && tMaxX < tMaxZ) {
+      x += stepX;
+      distance = tMaxX;
+      tMaxX += tDeltaX;
+      normal.set(-stepX, 0, 0);
+    } else if (tMaxY < tMaxZ) {
+      y += stepY;
+      distance = tMaxY;
+      tMaxY += tDeltaY;
+      normal.set(0, -stepY, 0);
     } else {
-      blockPos.copy(intersect.object.position);
+      z += stepZ;
+      distance = tMaxZ;
+      tMaxZ += tDeltaZ;
+      normal.set(0, 0, -stepZ);
     }
-    
-    highlighter.position.copy(blockPos);
-    highlighter.visible = true;
-    
-    return {
-      object: intersect.object,
-      instanceId: intersect.instanceId,
-      blockPosition: blockPos,
-      face: intersect.face ?? null,
-      point: intersect.point
-    };
-  } else {
-    highlighter.visible = false;
-    return null;
+
+    if (blocksMap.has(`${x},${y},${z}`)) {
+      return { hit: true, blockPosition: new THREE.Vector3(x, y, z), normal, distance };
+    }
   }
+
+  return { hit: false };
+};
+
+export const updateSelection = (
+  camera: THREE.PerspectiveCamera,
+  blocksMap: Map<string, number>,
+  highlighter: THREE.LineSegments,
+  maxDistance: number = 5
+): SelectionResult | null => {
+  const origin = new THREE.Vector3().copy(camera.position).addScalar(0.5);
+  const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+
+  const result = performVoxelTraversal(origin, direction, blocksMap, maxDistance);
+
+  if (result.hit && result.blockPosition && result.normal) {
+    highlighter.position.copy(result.blockPosition);
+    highlighter.visible = true;
+
+    return {
+      blockPosition: result.blockPosition,
+      face: { normal: result.normal },
+      distance: result.distance || 0
+    };
+  }
+
+  highlighter.visible = false;
+  return null;
 };
