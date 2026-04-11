@@ -1,26 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import './App.css';
 import { useMinecraft } from './hooks/useMinecraft';
+import Hotbar from './components/Hotbar/Hotbar';
+import Crosshair from './components/Crosshair/Crosshair';
 
 function App() {
   const [currentBlockType, setCurrentBlockType] = useState(1);
   const { mountRef, isLocked, lockControls } = useMinecraft(currentBlockType);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const key = event.key;
-      const code = event.code;
-      
-      if (code === 'Digit1' || key === '1') setCurrentBlockType(1);
-      if (code === 'Digit2' || key === '2') setCurrentBlockType(2);
-      if (code === 'Digit3' || key === '3') setCurrentBlockType(3);
-      if (code === 'Digit4' || key === '4') setCurrentBlockType(4);
-      if (code === 'Digit5' || key === '5') setCurrentBlockType(5);
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   return (
     <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden' }}>
@@ -31,20 +17,9 @@ function App() {
       />
 
       <div id="ui-layer" style={{ zIndex: 10, position: 'absolute', width: '100%', height: '100%', pointerEvents: 'none' }}>
-        {isLocked && <div id="crosshair"></div>}
+        <Crosshair isVisible={isLocked} />
         
-        {isLocked && (
-          <div id="hotbar" style={{ pointerEvents: 'auto' }}>
-            {[1, 2, 3, 4, 5].map((num) => (
-              <div
-                key={num}
-                className={`slot ${currentBlockType === num ? 'active' : ''}`}
-                id={`slot-${num}`}
-                title={`${num} - Bloque`}
-              ></div>
-            ))}
-          </div>
-        )}
+        <Hotbar isVisible={isLocked} onBlockChange={setCurrentBlockType} />
       </div>
 
       {!isLocked && (
