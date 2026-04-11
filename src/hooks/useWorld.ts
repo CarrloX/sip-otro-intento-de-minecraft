@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect } from 'react';
+import React, { useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { CHUNK_SIZE, generateChunk } from '../services/WorldService';
 
@@ -6,7 +6,7 @@ export const useWorld = (
   sceneRef: React.RefObject<THREE.Scene | null>,
   materialsRef: React.RefObject<Record<number, THREE.Material | THREE.Material[]>>,
   blockGeometryRef: React.RefObject<THREE.BoxGeometry>,
-  renderDistanceRef: React.MutableRefObject<number>
+  renderDistanceRef: React.RefObject<number>
 ) => {
   // World State (Option 3: Data Grid + InstancedMesh)
   const objectsRef = useRef<THREE.Object3D[]>([]); // For Raycasting

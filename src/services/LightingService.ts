@@ -5,7 +5,7 @@ export const updateFog = (scene: THREE.Scene, renderDistance: number) => {
   // fogNear: Where the fog starts (closer = more aggressive/claustrophobic)
   // fogFar: Where everything becomes solid color (should be within rendered radius)
   const fogNear = renderDistance * CHUNK_SIZE * 0.4;
-  const fogFar = renderDistance * CHUNK_SIZE * 1.0;
+  const fogFar = renderDistance * CHUNK_SIZE * 1;
   
   if (scene.fog instanceof THREE.Fog) {
     scene.fog.near = Math.max(10, fogNear);

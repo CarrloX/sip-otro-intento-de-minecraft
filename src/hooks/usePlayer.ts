@@ -19,7 +19,7 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>)
   const physicsAccumulator = useRef(0);
 
   const checkCollision = useCallback((pos: THREE.Vector3) => {
-    const PLAYER_WIDTH = 0.3;
+    const PLAYER_WIDTH = 0.29;
     const EYE_HEIGHT = 1.6;
     const HEAD_BUFFER = 0.2;
 
@@ -40,22 +40,11 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>)
     return false;
   }, [loadedBlocksRef]);
 
-  /**
-   * Handles a single 1/60s physics tick.
-   * This core logic is extracted to keep cognitive complexity low.
-   */
-  const applyPhysicsStep = useCallback((actions: any, camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
-    const isSprinting = actions.sprint && moveForward.current;
-    const isFlying = actions.isFlying;
-
-    // 1. Vertical Forces (Jump, Gravity & Flight)
+  const applyVerticalForces = useCallback((actions: Record<string, boolean>, isSprinting: boolean, isFlying: boolean) => {
     if (isFlying) {
-      // Direct vertical control in flight mode
       const flySpeed = 50;
       const verticalMove = (actions.jump ? 1 : 0) - (actions.down ? 1 : 0);
       velocity.current.y += verticalMove * flySpeed * PHYSICS_STEP;
-      
-      // Vertical damping in flight - reduced for lighter feel
       velocity.current.y -= velocity.current.y * 5 * PHYSICS_STEP;
     } else {
       if (actions.jump && canJump.current) {
@@ -64,8 +53,9 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>)
       }
       velocity.current.y -= 9.8 * 3 * PHYSICS_STEP;
     }
+  }, []);
 
-    // 2. Horizontal Forces (Friction & Movement)
+  const applyHorizontalForces = useCallback((isSprinting: boolean, isFlying: boolean) => {
     velocity.current.x -= velocity.current.x * 10 * PHYSICS_STEP;
     velocity.current.z -= velocity.current.z * 10 * PHYSICS_STEP;
 
@@ -73,37 +63,86 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>)
     direction.current.x = Number(moveRight.current) - Number(moveLeft.current);
     direction.current.normalize();
 
-    // Speed calculation: Faster in flight, and MUCH faster when sprinting in flight
     let baseSpeed = 40;
-    let multiplier = 1.0;
+    let multiplier = 1;
 
     if (isFlying) {
-      baseSpeed = 60; // Faster base fly speed
-      multiplier = isSprinting ? 3.0 : 1.0; // 3x speed when sprinting in air!
+      baseSpeed = 60;
+      multiplier = isSprinting ? 3 : 1;
     } else {
-      multiplier = isSprinting ? 1.3 : 1.0;
+      multiplier = isSprinting ? 1.3 : 1;
     }
 
     const speed = baseSpeed * multiplier;
     if (moveForward.current || moveBackward.current) velocity.current.z -= direction.current.z * speed * PHYSICS_STEP;
     if (moveLeft.current || moveRight.current) velocity.current.x -= direction.current.x * speed * PHYSICS_STEP;
+  }, []);
 
-    // 3. Collision Resolution (Vertical)
+  const resolveVerticalCollision = useCallback((camera: THREE.PerspectiveCamera) => {
     const oldPosY = camera.position.y;
     camera.position.y += velocity.current.y * PHYSICS_STEP;
+    
     if (checkCollision(camera.position)) {
       camera.position.y = oldPosY;
       if (velocity.current.y < 0) canJump.current = true;
       velocity.current.y = 0;
     }
-
-    // 4. Collision Resolution (Horizontal)
-    controls.moveRight(-velocity.current.x * PHYSICS_STEP);
-    if (checkCollision(camera.position)) controls.moveRight(velocity.current.x * PHYSICS_STEP);
-
-    controls.moveForward(-velocity.current.z * PHYSICS_STEP);
-    if (checkCollision(camera.position)) controls.moveForward(velocity.current.z * PHYSICS_STEP);
   }, [checkCollision]);
+
+  const resolveHorizontalCollision = useCallback((camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
+    const moveX = -velocity.current.x * PHYSICS_STEP;
+    const moveZ = -velocity.current.z * PHYSICS_STEP;
+    const EPSILON = 0.002;
+    
+    // Guardar posicion original
+    const originalPos = camera.position.clone();
+    
+    // Probar orden 1: X luego Z
+    controls.moveRight(moveX);
+    if (checkCollision(camera.position)) {
+      camera.position.x = originalPos.x;
+      velocity.current.x = 0;
+    }
+    controls.moveForward(moveZ);
+    if (checkCollision(camera.position)) {
+      camera.position.z = originalPos.z;
+      velocity.current.z = 0;
+    }
+    
+    // SI nos quedamos atrapados, probar el orden contrario Z luego X
+    if (checkCollision(camera.position)) {
+      camera.position.copy(originalPos);
+      
+      controls.moveForward(moveZ);
+      if (checkCollision(camera.position)) {
+        camera.position.z = originalPos.z;
+        velocity.current.z = 0;
+      }
+      controls.moveRight(moveX);
+      if (checkCollision(camera.position)) {
+        camera.position.x = originalPos.x;
+        velocity.current.x = 0;
+      }
+    }
+    
+    // Margen minimo para nunca quedar justo en el borde
+    if (velocity.current.x === 0) camera.position.x += (originalPos.x - camera.position.x) * EPSILON;
+    if (velocity.current.z === 0) camera.position.z += (originalPos.z - camera.position.z) * EPSILON;
+  }, [checkCollision]);
+
+  /**
+   * Handles a single 1/60s physics tick.
+   * Cognitive Complexity now reduced below threshold
+   */
+  const applyPhysicsStep = useCallback((actions: Record<string, boolean>, camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
+    const isSprinting = actions.sprint && moveForward.current;
+    const isFlying = actions.isFlying;
+
+    applyVerticalForces(actions, isSprinting, isFlying);
+    applyHorizontalForces(isSprinting, isFlying);
+    resolveVerticalCollision(camera);
+    resolveHorizontalCollision(camera, controls);
+  }, [applyVerticalForces, applyHorizontalForces, resolveVerticalCollision, resolveHorizontalCollision]);
 
   const update = useCallback((delta: number, camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
     if (!controls.isLocked) return;

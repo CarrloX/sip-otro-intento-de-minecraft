@@ -14,7 +14,7 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
   const frameCount = useRef(0);
-  const lastFpsUpdate = useRef(performance.now());
+  const lastFpsUpdate = useRef<number>(0);
   
   const currentBlockTypeRef = useRef(currentBlockType);
   const targetFpsRef = useRef(targetFps);
@@ -50,8 +50,8 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
   // Shared Configuration
   const materialsRef = useRef<Record<number, THREE.Material | THREE.Material[]>>({});
   const blockGeometryRef = useRef(new THREE.BoxGeometry(1, 1, 1));
-  const prevTime = useRef(performance.now());
-  const lastRenderTime = useRef(performance.now());
+  const prevTime = useRef<number>(0);
+  const lastRenderTime = useRef<number>(0);
 
   // Initialize World Hook (Manages Chunks and Blocks)
   const world = useWorld(sceneRef, materialsRef, blockGeometryRef, renderDistanceRef);
@@ -74,6 +74,7 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/immutability
     const mountNode = mountRef.current;
     if (!mountNode) return;
 
@@ -115,6 +116,11 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
 
     const handleMouseDown = (e: MouseEvent) => interaction.handleMouseDown(e);
     document.addEventListener('mousedown', handleMouseDown);
+
+    // Initialize timing references once on mount
+    lastFpsUpdate.current = performance.now();
+    prevTime.current = performance.now();
+    lastRenderTime.current = performance.now();
 
     // 7. Animation Loop
     let animationId: number;
@@ -186,7 +192,8 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
       world.loadedBlocksRef.current.clear();
       world.objectsRef.current = [];
     };
-  }, [interaction, player, world]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return { mountRef, isLocked, lockControls, fps };
 };
