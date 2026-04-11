@@ -9,6 +9,7 @@ function App() {
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
   const [targetFps, setTargetFps] = useState(144);
+  const [renderDistance, setRenderDistance] = useState(2);
   const [isMenuOpen, setIsMenuOpen] = useState(true); // Start with menu open
   const [lockControls, setLockControls] = useState<() => void>(() => () => {});
 
@@ -53,6 +54,7 @@ function App() {
       <GameCanvas 
         currentBlockType={currentBlockType} 
         targetFps={targetFps}
+        renderDistance={renderDistance}
         onStatusChange={handleStatusChange} 
       />
 
@@ -63,6 +65,8 @@ function App() {
         isMenuOpen={isMenuOpen}
         targetFps={targetFps}
         onFpsChange={setTargetFps}
+        renderDistance={renderDistance}
+        onRenderDistanceChange={setRenderDistance}
         onMenuToggle={toggleMenu}
       />
     </div>

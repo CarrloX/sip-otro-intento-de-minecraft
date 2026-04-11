@@ -15,6 +15,8 @@ const actionMap: Record<string, string> = {
   d: 'moveRight',
   Space: 'jump',
   ' ': 'jump',
+  ShiftLeft: 'down',
+  ShiftRight: 'down',
   Digit1: 'digit1',
   '1': 'digit1',
   Digit2: 'digit2',
@@ -46,25 +48,41 @@ export const useKeyboard = () => {
     digit5: false,
     menu: false,
     sprint: false,
+    down: false,
+    isFlying: false,
   });
 
   const actionsRef = useRef(actions);
-  const lastWPress = useRef(0);
+  const lastWRelease = useRef(0);
+  const lastSpaceRelease = useRef(0);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+
       const code = event.code;
       const action = actionMap[code] || actionMap[event.key.toLowerCase()];
       
       if (action) {
-        // Double-tap W logic
+        const now = performance.now();
+
+        // Double-tap W (Sprint) is calculated from the last RELEASE of W
         if (code === 'KeyW' || event.key.toLowerCase() === 'w') {
-          const now = performance.now();
-          if (now - lastWPress.current < 250) {
+          if (now - lastWRelease.current < 300) { // 300ms tolerance
              setActions((prev) => ({ ...prev, moveForward: true, sprint: true }));
              actionsRef.current.sprint = true;
           }
-          lastWPress.current = now;
+        }
+
+        // Double-tap Space (Flight) is calculated from the last RELEASE of Space
+        if (code === 'Space' || event.key === ' ') {
+          if (now - lastSpaceRelease.current < 300) {
+            setActions((prev) => {
+              const next = { ...prev, isFlying: !prev.isFlying, jump: true };
+              actionsRef.current = next;
+              return next;
+            });
+          }
         }
 
         setActions((prev) => {
@@ -78,6 +96,14 @@ export const useKeyboard = () => {
     const handleKeyUp = (event: KeyboardEvent) => {
       const code = event.code;
       const action = actionMap[code] || actionMap[event.key.toLowerCase()];
+
+      if (code === 'KeyW' || event.key.toLowerCase() === 'w') {
+        lastWRelease.current = performance.now();
+      }
+
+      if (code === 'Space' || event.key === ' ') {
+        lastSpaceRelease.current = performance.now();
+      }
 
       if (action) {
         setActions((prev) => {

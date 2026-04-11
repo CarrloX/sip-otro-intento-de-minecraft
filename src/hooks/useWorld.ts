@@ -1,11 +1,12 @@
-import { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 import { CHUNK_SIZE, generateChunk } from '../services/WorldService';
 
 export const useWorld = (
   sceneRef: React.RefObject<THREE.Scene | null>,
   materialsRef: React.RefObject<Record<number, THREE.Material | THREE.Material[]>>,
-  blockGeometryRef: React.RefObject<THREE.BoxGeometry>
+  blockGeometryRef: React.RefObject<THREE.BoxGeometry>,
+  renderDistanceRef: React.MutableRefObject<number>
 ) => {
   // World State (Option 3: Data Grid + InstancedMesh)
   const objectsRef = useRef<THREE.Object3D[]>([]); // For Raycasting
@@ -28,6 +29,8 @@ export const useWorld = (
     });
     objectsRef.current = meshes;
   }, []);
+
+  const lastRenderDistanceRef = useRef(renderDistanceRef.current);
 
   const buildChunkMesh = useCallback((chunkId: string) => {
     const keys = chunkBlocksRef.current.get(chunkId);
@@ -166,12 +169,13 @@ export const useWorld = (
   }, [sceneRef, updateRaycastObjects]);
 
   const manageChunks = useCallback((cameraPosition: THREE.Vector3) => {
-    const RENDER_DISTANCE = 2; 
+    const RENDER_DISTANCE = renderDistanceRef.current; 
     const px = Math.floor(cameraPosition.x / CHUNK_SIZE);
     const pz = Math.floor(cameraPosition.z / CHUNK_SIZE);
 
-    if (px !== playerChunkRef.current.x || pz !== playerChunkRef.current.z || loadedChunksRef.current.size === 0) {
+    if (px !== playerChunkRef.current.x || pz !== playerChunkRef.current.z || loadedChunksRef.current.size === 0 || lastRenderDistanceRef.current !== RENDER_DISTANCE) {
       playerChunkRef.current = { x: px, z: pz };
+      lastRenderDistanceRef.current = RENDER_DISTANCE;
       const newActiveChunks = new Set<string>();
 
       for(let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++){
@@ -194,11 +198,11 @@ export const useWorld = (
     }
   }, [loadChunk, unloadChunk]);
 
-  return {
+  return React.useMemo(() => ({
     objectsRef,
     loadedBlocksRef, // Expose mathematical grid to player physics
     addBlock,
     removeBlock,
     manageChunks
-  };
+  }), [addBlock, removeBlock, manageChunks]);
 };

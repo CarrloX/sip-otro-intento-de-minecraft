@@ -5,10 +5,12 @@ interface OptionsMenuProps {
   isVisible: boolean;
   targetFps: number;
   onFpsChange: (fps: number) => void;
+  renderDistance: number;
+  onRenderDistanceChange: (distance: number) => void;
   onClose: () => void;
 }
 
-const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, onClose }) => {
+const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, onClose }) => {
   if (!isVisible) return null;
 
   return (
@@ -29,6 +31,20 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               className="option-slider"
               aria-label="Max FPS"
               title="Ajustar límite de FPS"
+            />
+          </div>
+          <div className="option-row">
+            <span className="option-label">Render Distance: {renderDistance}</span>
+            <input 
+              type="range" 
+              min="2" 
+              max="32" 
+              step="1" 
+              value={renderDistance} 
+              onChange={(e) => onRenderDistanceChange(Number(e.target.value))}
+              className="option-slider"
+              aria-label="Render Distance"
+              title="Ajustar distancia de chunks"
             />
           </div>
         </div>

@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { createMaterials } from '../services/TextureService';
-import { setupLighting } from '../services/LightingService';
+import { setupLighting, updateFog } from '../services/LightingService';
 import { createHighlighter, updateSelection } from '../services/SelectionService';
 import type { SelectionResult } from '../services/SelectionService';
 import { usePlayer } from './usePlayer';
 import { useInteraction } from './useInteraction';
 import { useWorld } from './useWorld';
 
-export const useMinecraft = (currentBlockType: number, targetFps: number = 144) => {
+export const useMinecraft = (currentBlockType: number, targetFps: number = 144, renderDistance: number = 2) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
@@ -27,6 +27,19 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144) 
     targetFpsRef.current = targetFps;
   }, [targetFps]);
   
+  const renderDistanceRef = useRef(renderDistance);
+  useEffect(() => {
+    renderDistanceRef.current = renderDistance;
+    if (sceneRef.current) {
+      updateFog(sceneRef.current, renderDistance);
+    }
+    if (cameraRef.current) {
+      const CHUNK_SIZE = 16;
+      cameraRef.current.far = Math.max(100, renderDistance * CHUNK_SIZE * 2);
+      cameraRef.current.updateProjectionMatrix();
+    }
+  }, [renderDistance]);
+  
   // Three.js Core Refs
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -41,7 +54,7 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144) 
   const lastRenderTime = useRef(performance.now());
 
   // Initialize World Hook (Manages Chunks and Blocks)
-  const world = useWorld(sceneRef, materialsRef, blockGeometryRef);
+  const world = useWorld(sceneRef, materialsRef, blockGeometryRef, renderDistanceRef);
 
   // Initialize Custom Hooks with World Data
   const player = usePlayer(world.loadedBlocksRef);
@@ -66,11 +79,12 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144) 
 
     // 1. Init Scene & Lighting
     const scene = new THREE.Scene();
-    setupLighting(scene);
+    setupLighting(scene, renderDistanceRef.current);
     sceneRef.current = scene;
 
     // 2. Init Camera
-    const camera = new THREE.PerspectiveCamera(75, globalThis.innerWidth / globalThis.innerHeight, 0.1, 100);
+    const initialFar = Math.max(100, renderDistanceRef.current * 16 * 2);
+    const camera = new THREE.PerspectiveCamera(75, globalThis.innerWidth / globalThis.innerHeight, 0.1, initialFar);
     camera.position.y = 30;
     cameraRef.current = camera;
 
