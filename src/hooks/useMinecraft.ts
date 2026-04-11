@@ -3,6 +3,9 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { createMaterials } from '../services/TextureService';
 import { generateWorld, generateTree } from '../services/WorldService';
+import { setupLighting } from '../services/LightingService';
+import { createHighlighter, updateSelection } from '../services/SelectionService';
+import type { SelectionResult } from '../services/SelectionService';
 import { usePlayer } from './usePlayer';
 import { useInteraction } from './useInteraction';
 
@@ -22,6 +25,8 @@ export const useMinecraft = (currentBlockType: number) => {
   const controlsRef = useRef<PointerLockControls | null>(null);
   const objectsRef = useRef<THREE.Mesh[]>([]);
   const worldBlocksRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const hoveredBlockRef = useRef<SelectionResult | null>(null);
+  const raycasterRef = useRef(new THREE.Raycaster());
   
   // Services & State
   const materialsRef = useRef<Record<number, THREE.Material | THREE.Material[]>>({});
@@ -60,7 +65,8 @@ export const useMinecraft = (currentBlockType: number) => {
     controlsRef,
     addBlock,
     removeBlock,
-    currentBlockTypeRef
+    currentBlockTypeRef,
+    hoveredBlockRef
   );
 
   const lockControls = () => {
@@ -73,8 +79,7 @@ export const useMinecraft = (currentBlockType: number) => {
 
     // Init Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB);
-    scene.fog = new THREE.Fog(0x87CEEB, 20, 50);
+    setupLighting(scene);
     sceneRef.current = scene;
 
     // Init Camera
@@ -82,15 +87,6 @@ export const useMinecraft = (currentBlockType: number) => {
     camera.position.y = 30;
     cameraRef.current = camera;
 
-    // Init Lights
-    const ambientLight = new THREE.HemisphereLight(0xeeeeff, 0x777788, 0.75);
-    ambientLight.position.set(0.5, 1, 0.75);
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 20, 10);
-    directionalLight.castShadow = true;
-    scene.add(directionalLight);
 
     // Init Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -121,6 +117,10 @@ export const useMinecraft = (currentBlockType: number) => {
     // Event Listeners
     // Event Listeners (Keyboard handled by usePlayer)
 
+    // Highlighter
+    const highlighter = createHighlighter();
+    scene.add(highlighter);
+
     const handleMouseDown = (e: MouseEvent) => interaction.handleMouseDown(e);
 
     document.addEventListener('mousedown', handleMouseDown);
@@ -134,6 +134,15 @@ export const useMinecraft = (currentBlockType: number) => {
 
       if (controls.isLocked) {
         player.update(delta, camera, controls);
+        hoveredBlockRef.current = updateSelection(
+          raycasterRef.current,
+          camera,
+          objectsRef.current,
+          highlighter
+        );
+      } else {
+        highlighter.visible = false;
+        hoveredBlockRef.current = null;
       }
       
       prevTime.current = time;

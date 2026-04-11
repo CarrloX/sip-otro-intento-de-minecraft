@@ -1,0 +1,27 @@
+import * as THREE from 'three';
+
+export const setupLighting = (scene: THREE.Scene) => {
+  // Background and Fog (Atmosphere)
+  scene.background = new THREE.Color(0x87CEEB);
+  scene.fog = new THREE.Fog(0x87CEEB, 20, 50);
+
+  // Ambient/Hemisphere Light
+  const ambientLight = new THREE.HemisphereLight(0xeeeeff, 0x777788, 0.75);
+  ambientLight.position.set(0.5, 1, 0.75);
+  scene.add(ambientLight);
+
+  // Directional Light (Sun)
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  directionalLight.position.set(10, 20, 10);
+  directionalLight.castShadow = true;
+  
+  // Shadow Configuration
+  directionalLight.shadow.mapSize.width = 1024;
+  directionalLight.shadow.mapSize.height = 1024;
+  directionalLight.shadow.camera.near = 0.5;
+  directionalLight.shadow.camera.far = 50;
+  
+  scene.add(directionalLight);
+
+  return { ambientLight, directionalLight };
+};
