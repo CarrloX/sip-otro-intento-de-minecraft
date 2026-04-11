@@ -1,70 +1,51 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { createMaterials } from '../services/TextureService';
-import { generateWorld, generateTree } from '../services/WorldService';
 import { setupLighting } from '../services/LightingService';
 import { createHighlighter, updateSelection } from '../services/SelectionService';
 import type { SelectionResult } from '../services/SelectionService';
 import { usePlayer } from './usePlayer';
 import { useInteraction } from './useInteraction';
+import { useWorld } from './useWorld';
 
 export const useMinecraft = (currentBlockType: number) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [isLocked, setIsLocked] = useState(false);
+  const [fps, setFps] = useState(0);
+  const frameCount = useRef(0);
+  const lastFpsUpdate = useRef(performance.now());
   
   const currentBlockTypeRef = useRef(currentBlockType);
   useEffect(() => {
     currentBlockTypeRef.current = currentBlockType;
   }, [currentBlockType]);
   
-  // Three.js Refs
+  // Three.js Core Refs
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<PointerLockControls | null>(null);
-  const objectsRef = useRef<THREE.Mesh[]>([]);
-  const worldBlocksRef = useRef<Map<string, THREE.Mesh>>(new Map());
-  const hoveredBlockRef = useRef<SelectionResult | null>(null);
   const raycasterRef = useRef(new THREE.Raycaster());
+  const hoveredBlockRef = useRef<SelectionResult | null>(null);
   
-  // Services & State
+  // Shared Configuration
   const materialsRef = useRef<Record<number, THREE.Material | THREE.Material[]>>({});
-  const blockGeometry = useRef(new THREE.BoxGeometry(1, 1, 1));
+  const blockGeometryRef = useRef(new THREE.BoxGeometry(1, 1, 1));
   const prevTime = useRef(performance.now());
 
-  // Initialize Custom Hooks
-  const player = usePlayer(worldBlocksRef);
+  // Initialize World Hook (Manages Chunks and Blocks)
+  const world = useWorld(sceneRef, materialsRef, blockGeometryRef);
+
+  // Initialize Custom Hooks with World Data
+  const player = usePlayer(world.loadedBlocksRef);
   
-  const addBlock = useCallback((x: number, y: number, z: number, type: number) => {
-    const key = `${Math.round(x)},${Math.round(y)},${Math.round(z)}`;
-    if (worldBlocksRef.current.has(key)) return;
-
-    const material = materialsRef.current[type];
-    const mesh = new THREE.Mesh(blockGeometry.current, material);
-    mesh.position.set(x, y, z);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.userData = { type, key };
-
-    sceneRef.current?.add(mesh);
-    objectsRef.current.push(mesh);
-    worldBlocksRef.current.set(key, mesh);
-  }, []);
-
-  const removeBlock = useCallback((mesh: THREE.Mesh) => {
-    sceneRef.current?.remove(mesh);
-    const index = objectsRef.current.indexOf(mesh);
-    if (index > -1) objectsRef.current.splice(index, 1);
-    worldBlocksRef.current.delete(mesh.userData.key);
-  }, []);
-
   const interaction = useInteraction(
-    objectsRef,
+    world.objectsRef,
     cameraRef,
     controlsRef,
-    addBlock,
-    removeBlock,
+    world.addBlock,
+    world.removeBlock,
     currentBlockTypeRef,
     hoveredBlockRef
   );
@@ -77,18 +58,17 @@ export const useMinecraft = (currentBlockType: number) => {
     const mountNode = mountRef.current;
     if (!mountNode) return;
 
-    // Init Scene
+    // 1. Init Scene & Lighting
     const scene = new THREE.Scene();
     setupLighting(scene);
     sceneRef.current = scene;
 
-    // Init Camera
+    // 2. Init Camera
     const camera = new THREE.PerspectiveCamera(75, globalThis.innerWidth / globalThis.innerHeight, 0.1, 100);
     camera.position.y = 30;
     cameraRef.current = camera;
 
-
-    // Init Renderer
+    // 3. Init Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setPixelRatio(globalThis.devicePixelRatio);
     renderer.setSize(globalThis.innerWidth, globalThis.innerHeight);
@@ -96,7 +76,7 @@ export const useMinecraft = (currentBlockType: number) => {
     mountNode.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Init Controls
+    // 4. Init Controls
     const controls = new PointerLockControls(camera, document.body);
     scene.add(controls.object);
     controlsRef.current = controls;
@@ -106,38 +86,39 @@ export const useMinecraft = (currentBlockType: number) => {
     controls.addEventListener('lock', onLock);
     controls.addEventListener('unlock', onUnlock);
 
-    // World & Materials
+    // 5. Shared Resources
     materialsRef.current = createMaterials();
-    
-    const treeGen = (x: number, y: number, z: number) => 
-      generateTree(x, y, z, addBlock, worldBlocksRef.current);
-    
-    generateWorld(30, addBlock, treeGen);
 
-    // Event Listeners
-    // Event Listeners (Keyboard handled by usePlayer)
-
-    // Highlighter
+    // 6. Highlighter & Interactions
     const highlighter = createHighlighter();
     scene.add(highlighter);
 
     const handleMouseDown = (e: MouseEvent) => interaction.handleMouseDown(e);
-
     document.addEventListener('mousedown', handleMouseDown);
 
-    // Animation Loop
+    // 7. Animation Loop
     let animationId: number;
     const animate = () => {
       animationId = requestAnimationFrame(animate);
       const time = performance.now();
       const delta = Math.min((time - prevTime.current) / 1000, 0.1);
 
+      // FPS Tracking
+      frameCount.current++;
+      if (time - lastFpsUpdate.current > 1000) {
+        setFps(Math.round((frameCount.current * 1000) / (time - lastFpsUpdate.current)));
+        frameCount.current = 0;
+        lastFpsUpdate.current = time;
+      }
+
       if (controls.isLocked) {
+        // Delegate updates to specialized hooks
         player.update(delta, camera, controls);
+        world.manageChunks(camera.position);
         hoveredBlockRef.current = updateSelection(
           raycasterRef.current,
           camera,
-          objectsRef.current,
+          world.objectsRef.current,
           highlighter
         );
       } else {
@@ -157,7 +138,7 @@ export const useMinecraft = (currentBlockType: number) => {
     };
     globalThis.addEventListener('resize', onResize);
 
-    // Cleanup
+    // 8. Cleanup
     return () => {
       cancelAnimationFrame(animationId);
       globalThis.removeEventListener('resize', onResize);
@@ -165,13 +146,11 @@ export const useMinecraft = (currentBlockType: number) => {
       controls.removeEventListener('lock', onLock);
       controls.removeEventListener('unlock', onUnlock);
       renderer.dispose();
-      
       renderer.domElement.remove();
-      
-      worldBlocksRef.current.clear();
-      objectsRef.current = [];
+      world.loadedBlocksRef.current.clear();
+      world.objectsRef.current = [];
     };
-  }, [addBlock, interaction, player]);
+  }, [interaction, player, world]);
 
-  return { mountRef, isLocked, lockControls };
+  return { mountRef, isLocked, lockControls, fps };
 };

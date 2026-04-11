@@ -4,15 +4,15 @@ import './GameCanvas.css';
 
 interface GameCanvasProps {
   currentBlockType: number;
-  onStatusChange: (status: { isLocked: boolean; lockControls: () => void }) => void;
+  onStatusChange: (status: { isLocked: boolean; lockControls: () => void; fps: number }) => void;
 }
 
 const GameCanvas = ({ currentBlockType, onStatusChange }: GameCanvasProps) => {
-  const { mountRef, isLocked, lockControls } = useMinecraft(currentBlockType);
+  const { mountRef, isLocked, lockControls, fps } = useMinecraft(currentBlockType);
 
   useEffect(() => {
-    onStatusChange({ isLocked, lockControls });
-  }, [isLocked, lockControls, onStatusChange]);
+    onStatusChange({ isLocked, lockControls, fps });
+  }, [isLocked, lockControls, fps, onStatusChange]);
 
   return (
     <div 

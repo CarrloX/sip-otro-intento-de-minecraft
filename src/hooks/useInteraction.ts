@@ -4,11 +4,11 @@ import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockCont
 import type { SelectionResult } from '../services/SelectionService';
 
 export const useInteraction = (
-  _objectsRef: React.RefObject<THREE.Mesh[]>,
+  _objectsRef: React.RefObject<THREE.Object3D[]>,
   cameraRef: React.RefObject<THREE.PerspectiveCamera | null>,
   controlsRef: React.RefObject<PointerLockControls | null>,
   addBlockFn: (x: number, y: number, z: number, type: number) => void,
-  removeBlockFn: (mesh: THREE.Mesh) => void,
+  removeBlockFn: (x: number, y: number, z: number) => void,
   currentBlockTypeRef: React.RefObject<number>,
   hoveredBlockRef: React.RefObject<SelectionResult | null>
 ) => {
@@ -18,9 +18,9 @@ export const useInteraction = (
     const intersect = hoveredBlockRef.current;
     
     if (event.button === 0) {
-      removeBlockFn(intersect.object);
+      removeBlockFn(intersect.blockPosition.x, intersect.blockPosition.y, intersect.blockPosition.z);
     } else if (event.button === 2 && intersect.face) {
-      const pos = intersect.object.position.clone().add(intersect.face.normal);
+      const pos = intersect.blockPosition.clone().add(intersect.face.normal);
       const pPos = cameraRef.current.position;
       
       // Prevent placing block inside player's body

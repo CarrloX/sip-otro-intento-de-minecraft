@@ -11,3 +11,15 @@
   align-items: center;
   z-index: 10;
 }
+
+.fps-counter {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: white;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 4px 8px;
+  border-radius: 4px;
+}

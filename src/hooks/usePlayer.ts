@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { useKeyboard } from './useKeyboard';
 
-export const usePlayer = (worldBlocksRef: React.RefObject<Map<string, THREE.Mesh>>) => {
+export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>) => {
   const { actionsRef } = useKeyboard();
   const velocity = useRef(new THREE.Vector3());
   const direction = useRef(new THREE.Vector3());
@@ -30,14 +30,14 @@ export const usePlayer = (worldBlocksRef: React.RefObject<Map<string, THREE.Mesh
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         for (let z = minZ; z <= maxZ; z++) {
-          if (worldBlocksRef.current.has(`${x},${y},${z}`)) {
+          if (loadedBlocksRef.current?.has(`${x},${y},${z}`)) {
             return true;
           }
         }
       }
     }
     return false;
-  }, [worldBlocksRef]);
+  }, [loadedBlocksRef]);
 
   const update = useCallback((delta: number, camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
     if (!controls.isLocked) return;
