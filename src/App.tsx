@@ -9,21 +9,21 @@ function App() {
   const { mountRef, isLocked, lockControls } = useMinecraft(currentBlockType);
 
   return (
-    <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden' }}>
+    <div className="app-container">
       {/* Contenedor dedicado exclusivamente al canvas de Three.js */}
       <div 
         ref={mountRef} 
-        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }} 
+        className="game-mount" 
       />
 
-      <div id="ui-layer" style={{ zIndex: 10, position: 'absolute', width: '100%', height: '100%', pointerEvents: 'none' }}>
+      <div id="ui-layer">
         <Crosshair isVisible={isLocked} />
         
         <Hotbar isVisible={isLocked} onBlockChange={setCurrentBlockType} />
       </div>
 
       {!isLocked && (
-        <div id="blocker" onClick={lockControls}>
+        <button id="blocker" onClick={lockControls} type="button">
           <div id="instructions">
             <h1>Minecraft React</h1>
             <p>Haz clic para jugar</p>
@@ -45,7 +45,7 @@ function App() {
               <span className="key">1</span> - <span className="key">5</span> - Seleccionar Bloque
             </p>
           </div>
-        </div>
+        </button>
       )}
     </div>
   );

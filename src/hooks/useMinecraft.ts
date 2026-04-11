@@ -78,7 +78,7 @@ export const useMinecraft = (currentBlockType: number) => {
     sceneRef.current = scene;
 
     // Init Camera
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+    const camera = new THREE.PerspectiveCamera(75, globalThis.innerWidth / globalThis.innerHeight, 0.1, 100);
     camera.position.y = 30;
     cameraRef.current = camera;
 
@@ -94,8 +94,8 @@ export const useMinecraft = (currentBlockType: number) => {
 
     // Init Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: false });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(globalThis.devicePixelRatio);
+    renderer.setSize(globalThis.innerWidth, globalThis.innerHeight);
     renderer.shadowMap.enabled = true;
     mountNode.appendChild(renderer.domElement);
     rendererRef.current = renderer;
@@ -143,8 +143,8 @@ export const useMinecraft = (currentBlockType: number) => {
 
     const handleMouseDown = (e: MouseEvent) => interaction.handleMouseDown(e);
 
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
+    globalThis.addEventListener('keydown', onKeyDown);
+    globalThis.addEventListener('keyup', onKeyUp);
     document.addEventListener('mousedown', handleMouseDown);
 
     // Animation Loop
@@ -164,26 +164,24 @@ export const useMinecraft = (currentBlockType: number) => {
     animate();
 
     const onResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.aspect = globalThis.innerWidth / globalThis.innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(globalThis.innerWidth, globalThis.innerHeight);
     };
-    window.addEventListener('resize', onResize);
+    globalThis.addEventListener('resize', onResize);
 
     // Cleanup
     return () => {
       cancelAnimationFrame(animationId);
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
+      globalThis.removeEventListener('resize', onResize);
+      globalThis.removeEventListener('keydown', onKeyDown);
+      globalThis.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('mousedown', handleMouseDown);
       controls.removeEventListener('lock', onLock);
       controls.removeEventListener('unlock', onUnlock);
       renderer.dispose();
       
-      if (renderer.domElement.parentNode === mountNode) {
-        mountNode.removeChild(renderer.domElement);
-      }
+      renderer.domElement.remove();
       
       worldBlocksRef.current.clear();
       objectsRef.current = [];

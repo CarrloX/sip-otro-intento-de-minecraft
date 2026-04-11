@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 
 export const generateWorld = (
   worldSize: number,
@@ -31,6 +30,28 @@ export const generateWorld = (
   }
 };
 
+const generateLeaves = (
+  centerX: number,
+  centerY: number,
+  centerZ: number,
+  height: number,
+  addBlockFn: (x: number, y: number, z: number, type: number) => void,
+  worldBlocks: Map<string, any>
+) => {
+  for (let hx = centerX - 2; hx <= centerX + 2; hx++) {
+    for (let hz = centerZ - 2; hz <= centerZ + 2; hz++) {
+      for (let hy = centerY + height - 2; hy <= centerY + height + 1; hy++) {
+        const isCornerTop = Math.abs(hx - centerX) === 2 && Math.abs(hz - centerZ) === 2 && hy === centerY + height + 1;
+        if (isCornerTop) continue;
+        
+        if (!worldBlocks.has(`${hx},${hy},${hz}`)) {
+          addBlockFn(hx, hy, hz, 5);
+        }
+      }
+    }
+  }
+};
+
 export const generateTree = (
   x: number,
   y: number,
@@ -42,14 +63,6 @@ export const generateTree = (
   for (let i = 0; i < height; i++) {
     addBlockFn(x, y + i, z, 4);
   }
-  for (let hx = x - 2; hx <= x + 2; hx++) {
-    for (let hz = z - 2; hz <= z + 2; hz++) {
-      for (let hy = y + height - 2; hy <= y + height + 1; hy++) {
-        if (Math.abs(hx - x) === 2 && Math.abs(hz - z) === 2 && hy === y + height + 1) continue;
-        if (!worldBlocks.has(`${hx},${hy},${hz}`)) {
-          addBlockFn(hx, hy, hz, 5);
-        }
-      }
-    }
-  }
+  
+  generateLeaves(x, y, z, height, addBlockFn, worldBlocks);
 };

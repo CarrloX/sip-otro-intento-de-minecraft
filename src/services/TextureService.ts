@@ -4,7 +4,8 @@ export const generateTexture = (width: number, height: number, type: string) => 
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const context = canvas.getContext('2d')!;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Failed to get 2D context');
   const imageData = context.createImageData(width, height);
   const data = imageData.data;
 

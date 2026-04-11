@@ -2,7 +2,7 @@ import { useRef, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 
-export const usePlayer = (worldBlocksRef: React.MutableRefObject<Map<string, THREE.Mesh>>) => {
+export const usePlayer = (worldBlocksRef: React.RefObject<Map<string, THREE.Mesh>>) => {
   const velocity = useRef(new THREE.Vector3());
   const direction = useRef(new THREE.Vector3());
   const moveForward = useRef(false);
@@ -37,15 +37,15 @@ export const usePlayer = (worldBlocksRef: React.MutableRefObject<Map<string, THR
   const update = useCallback((delta: number, camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
     if (!controls.isLocked) return;
 
-    velocity.current.x -= velocity.current.x * 10.0 * delta;
-    velocity.current.z -= velocity.current.z * 10.0 * delta;
-    velocity.current.y -= 9.8 * 3.0 * delta;
+    velocity.current.x -= velocity.current.x * 10 * delta;
+    velocity.current.z -= velocity.current.z * 10 * delta;
+    velocity.current.y -= 9.8 * 3 * delta;
 
     direction.current.z = Number(moveForward.current) - Number(moveBackward.current);
     direction.current.x = Number(moveRight.current) - Number(moveLeft.current);
     direction.current.normalize();
 
-    const speed = 40.0;
+    const speed = 40;
     if (moveForward.current || moveBackward.current) velocity.current.z -= direction.current.z * speed * delta;
     if (moveLeft.current || moveRight.current) velocity.current.x -= direction.current.x * speed * delta;
 

@@ -27,14 +27,14 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    globalThis.addEventListener('keydown', handleKeyDown);
+    return () => globalThis.removeEventListener('keydown', handleKeyDown);
   }, [onBlockChange]);
 
   if (!isVisible) return null;
 
   return (
-    <div className="hotbar" id="hotbar" style={{ pointerEvents: 'auto' }}>
+    <div className="hotbar" id="hotbar">
       {[1, 2, 3, 4, 5].map((num) => (
         <div
           key={num}

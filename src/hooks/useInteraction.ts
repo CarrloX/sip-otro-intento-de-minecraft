@@ -3,12 +3,12 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 
 export const useInteraction = (
-  objectsRef: React.MutableRefObject<THREE.Mesh[]>,
-  cameraRef: React.MutableRefObject<THREE.PerspectiveCamera | null>,
-  controlsRef: React.MutableRefObject<PointerLockControls | null>,
+  objectsRef: React.RefObject<THREE.Mesh[]>,
+  cameraRef: React.RefObject<THREE.PerspectiveCamera | null>,
+  controlsRef: React.RefObject<PointerLockControls | null>,
   addBlockFn: (x: number, y: number, z: number, type: number) => void,
   removeBlockFn: (mesh: THREE.Mesh) => void,
-  currentBlockTypeRef: React.MutableRefObject<number>
+  currentBlockTypeRef: React.RefObject<number>
 ) => {
   const raycaster = useRef(new THREE.Raycaster());
 
