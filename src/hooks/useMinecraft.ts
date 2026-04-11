@@ -9,7 +9,7 @@ import { usePlayer } from './usePlayer';
 import { useInteraction } from './useInteraction';
 import { useWorld } from './useWorld';
 
-export const useMinecraft = (currentBlockType: number, targetFps: number = 144, renderDistance: number = 2) => {
+export const useMinecraft = (currentBlockType: number, targetFps: number = 144, renderDistance: number = 2, autoJump: boolean = true) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
@@ -56,8 +56,13 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
   // Initialize World Hook (Manages Chunks and Blocks)
   const world = useWorld(sceneRef, materialsRef, blockGeometryRef, renderDistanceRef);
 
+  const autoJumpRef = useRef(autoJump);
+  useEffect(() => {
+    autoJumpRef.current = autoJump;
+  }, [autoJump]);
+
   // Initialize Custom Hooks with World Data
-  const player = usePlayer(world.loadedBlocksRef);
+  const player = usePlayer(world.loadedBlocksRef, autoJumpRef);
   
   const interaction = useInteraction(
     world.objectsRef,

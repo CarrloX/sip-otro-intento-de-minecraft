@@ -12,10 +12,12 @@ interface HudProps {
   onFpsChange: (fps: number) => void;
   renderDistance: number;
   onRenderDistanceChange: (distance: number) => void;
+  autoJump: boolean;
+  onAutoJumpChange: (autoJump: boolean) => void;
   onMenuToggle: () => void;
 }
 
-const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, onMenuToggle }: HudProps) => {
+const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, onMenuToggle }: HudProps) => {
   return (
     <div id="ui-layer">
       <div className="fps-counter">FPS: {fps}</div>
@@ -28,6 +30,8 @@ const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange,
         onFpsChange={onFpsChange}
         renderDistance={renderDistance}
         onRenderDistanceChange={onRenderDistanceChange}
+        autoJump={autoJump}
+        onAutoJumpChange={onAutoJumpChange}
         onClose={onMenuToggle}
       />
     </div>

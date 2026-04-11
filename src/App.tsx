@@ -10,6 +10,7 @@ function App() {
   const [fps, setFps] = useState(0);
   const [targetFps, setTargetFps] = useState(144);
   const [renderDistance, setRenderDistance] = useState(2);
+  const [autoJump, setAutoJump] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(true); // Start with menu open
   const [lockControls, setLockControls] = useState<() => void>(() => () => {});
 
@@ -55,6 +56,7 @@ function App() {
         currentBlockType={currentBlockType} 
         targetFps={targetFps}
         renderDistance={renderDistance}
+        autoJump={autoJump}
         onStatusChange={handleStatusChange} 
       />
 
@@ -67,6 +69,8 @@ function App() {
         onFpsChange={setTargetFps}
         renderDistance={renderDistance}
         onRenderDistanceChange={setRenderDistance}
+        autoJump={autoJump}
+        onAutoJumpChange={setAutoJump}
         onMenuToggle={toggleMenu}
       />
     </div>

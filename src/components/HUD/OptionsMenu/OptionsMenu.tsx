@@ -7,10 +7,12 @@ interface OptionsMenuProps {
   onFpsChange: (fps: number) => void;
   renderDistance: number;
   onRenderDistanceChange: (distance: number) => void;
+  autoJump: boolean;
+  onAutoJumpChange: (autoJump: boolean) => void;
   onClose: () => void;
 }
 
-const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, onClose }) => {
+const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, onClose }) => {
   if (!isVisible) return null;
 
   return (
@@ -45,6 +47,18 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               className="option-slider"
               aria-label="Render Distance"
               title="Ajustar distancia de chunks"
+            />
+          </div>
+          <div className="option-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="option-label">Auto Jump</span>
+            <input 
+              type="checkbox" 
+              checked={autoJump} 
+              onChange={(e) => onAutoJumpChange(e.target.checked)}
+              className="option-checkbox"
+              aria-label="Auto Jump"
+              title="Activar o desactivar el salto automático"
+              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
             />
           </div>
         </div>

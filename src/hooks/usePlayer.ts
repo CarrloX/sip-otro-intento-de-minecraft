@@ -6,7 +6,7 @@ import { useKeyboard } from './useKeyboard';
 const PHYSICS_STEP = 1 / 60;
 const MAX_SUBSTEPS = 5;
 
-export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>) => {
+export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>, autoJumpEnabledRef: React.RefObject<boolean>) => {
   const { actionsRef } = useKeyboard();
   const velocity = useRef(new THREE.Vector3());
   const direction = useRef(new THREE.Vector3());
@@ -110,18 +110,35 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>)
 
     // Mover y probar en el eje X global independientemente
     camera.position.x += deltaX;
+    let collidedX = false;
     if (checkCollision(camera.position)) {
       camera.position.x = originalPos.x;
-      // Opcional: reducir la velocidad local si choca pero 
-      // al probar ejes independientes el deslizamiento ya es fluido.
+      collidedX = true;
     }
 
     // Mover y probar en el eje Z global independientemente
     camera.position.z += deltaZ;
+    let collidedZ = false;
     if (checkCollision(camera.position)) {
       camera.position.z = originalPos.z;
+      collidedZ = true;
     }
-  }, [checkCollision]);
+
+    // Lógica de Salto Automático
+    if ((collidedX || collidedZ) && autoJumpEnabledRef?.current && moveForward.current && canJump.current) {
+        const testPos = camera.position.clone();
+        // Intentar ver si moviéndonos en la dirección bloqueada y subiendo, hay espacio libre
+        if (collidedX) testPos.x += deltaX;
+        if (collidedZ) testPos.z += deltaZ;
+        testPos.y += 1.2; // Altura mínima para superar 1 bloque
+
+        if (!checkCollision(testPos)) {
+            // El bloque de arriba está libre, realizar salto automático
+            velocity.current.y += isSprintingRef.current ? 8.8 : 8;
+            canJump.current = false;
+        }
+    }
+  }, [checkCollision, autoJumpEnabledRef]);
 
   /**
    * Handles a single 1/60s physics tick.
