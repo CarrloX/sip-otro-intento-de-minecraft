@@ -1,0 +1,130 @@
+#root {
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #87CEEB;
+  font-family: 'Courier New', Courier, monospace;
+  user-select: none;
+}
+
+#ui-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+/* Mira (Crosshair) */
+#crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+}
+
+#crosshair::before,
+#crosshair::after {
+  content: '';
+  position: absolute;
+  background-color: rgba(255, 255, 255, 0.8);
+  mix-blend-mode: difference;
+}
+
+#crosshair::before {
+  top: 9px;
+  left: 0;
+  width: 20px;
+  height: 2px;
+}
+
+#crosshair::after {
+  top: 0;
+  left: 9px;
+  width: 2px;
+  height: 20px;
+}
+
+/* Pantalla de Inicio / Pausa */
+#blocker {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 20;
+}
+
+#instructions {
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 40px;
+  border-radius: 10px;
+  text-align: center;
+  border: 2px solid #555;
+}
+
+#instructions h1 {
+  margin-top: 0;
+  color: #4CAF50;
+}
+
+.key {
+  background: #eee;
+  color: #333;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+/* Barra de inventario rápida */
+#hotbar {
+  position: absolute;
+  bottom: 20px;
+  display: flex;
+  gap: 5px;
+  background-color: rgba(0, 0, 0, 0.6);
+  padding: 5px;
+  border: 2px solid #333;
+  border-radius: 5px;
+}
+
+.slot {
+  width: 40px;
+  height: 40px;
+  border: 2px solid #555;
+  background-color: #888;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.1s, transform 0.1s;
+}
+
+.slot.active {
+  border-color: white;
+  transform: scale(1.1);
+}
+
+/* Colores de los iconos del inventario */
+#slot-1 { background: linear-gradient(to bottom, #5d9e3b 0%, #5d9e3b 20%, #79553a 20%, #79553a 100%); }
+#slot-2 { background-color: #79553a; }
+#slot-3 { background-color: #808080; }
+#slot-4 { background-color: #6a4b35; }
+#slot-5 { background-color: #3b7a2d; }
