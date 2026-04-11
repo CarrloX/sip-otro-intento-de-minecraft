@@ -92,42 +92,35 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>)
   const resolveHorizontalCollision = useCallback((camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
     const moveX = -velocity.current.x * PHYSICS_STEP;
     const moveZ = -velocity.current.z * PHYSICS_STEP;
-    const EPSILON = 0.002;
     
     // Guardar posicion original
     const originalPos = camera.position.clone();
     
-    // Probar orden 1: X luego Z
+    // Calcular posicion objetivo a partir del movimiento local de la camara
     controls.moveRight(moveX);
+    controls.moveForward(moveZ);
+    const targetPos = camera.position.clone();
+    
+    // Obtener los deltas globales
+    const deltaX = targetPos.x - originalPos.x;
+    const deltaZ = targetPos.z - originalPos.z;
+
+    // Resetear a la posicion original
+    camera.position.copy(originalPos);
+
+    // Mover y probar en el eje X global independientemente
+    camera.position.x += deltaX;
     if (checkCollision(camera.position)) {
       camera.position.x = originalPos.x;
-      velocity.current.x = 0;
+      // Opcional: reducir la velocidad local si choca pero 
+      // al probar ejes independientes el deslizamiento ya es fluido.
     }
-    controls.moveForward(moveZ);
+
+    // Mover y probar en el eje Z global independientemente
+    camera.position.z += deltaZ;
     if (checkCollision(camera.position)) {
       camera.position.z = originalPos.z;
-      velocity.current.z = 0;
     }
-    
-    // SI nos quedamos atrapados, probar el orden contrario Z luego X
-    if (checkCollision(camera.position)) {
-      camera.position.copy(originalPos);
-      
-      controls.moveForward(moveZ);
-      if (checkCollision(camera.position)) {
-        camera.position.z = originalPos.z;
-        velocity.current.z = 0;
-      }
-      controls.moveRight(moveX);
-      if (checkCollision(camera.position)) {
-        camera.position.x = originalPos.x;
-        velocity.current.x = 0;
-      }
-    }
-    
-    // Margen minimo para nunca quedar justo en el borde
-    if (velocity.current.x === 0) camera.position.x += (originalPos.x - camera.position.x) * EPSILON;
-    if (velocity.current.z === 0) camera.position.z += (originalPos.z - camera.position.z) * EPSILON;
   }, [checkCollision]);
 
   /**
