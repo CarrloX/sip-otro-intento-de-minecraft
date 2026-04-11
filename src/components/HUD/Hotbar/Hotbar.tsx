@@ -25,6 +25,24 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
     }
   }, [actions, onBlockChange, currentBlockType]);
 
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (!isVisible) return;
+      
+      setCurrentBlockType((prev) => {
+        let next = prev + (e.deltaY > 0 ? 1 : -1);
+        if (next > 5) next = 1;
+        if (next < 1) next = 5;
+        
+        onBlockChange(next);
+        return next;
+      });
+    };
+
+    window.addEventListener('wheel', handleWheel);
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [isVisible, onBlockChange]);
+
   if (!isVisible) return null;
 
   return (

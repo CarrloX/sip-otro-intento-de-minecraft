@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import './App.css';
 import GameCanvas from './components/GameCanvas/GameCanvas';
-import HUD from './components/HUD/HUD';
+import Hud from './components/HUD/HUD';
 import Blocker from './components/Blocker/Blocker';
 
 function App() {
@@ -23,7 +23,7 @@ function App() {
         onStatusChange={handleStatusChange} 
       />
 
-      <HUD 
+      <Hud 
         isLocked={isLocked} 
         fps={fps}
         onBlockChange={setCurrentBlockType} 

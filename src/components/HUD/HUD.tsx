@@ -2,13 +2,13 @@ import Hotbar from './Hotbar/Hotbar';
 import Crosshair from './Crosshair/Crosshair';
 import './HUD.css';
 
-interface HUDProps {
+interface HudProps {
   isLocked: boolean;
   fps: number;
   onBlockChange: (type: number) => void;
 }
 
-const HUD = ({ isLocked, fps, onBlockChange }: HUDProps) => {
+const Hud = ({ isLocked, fps, onBlockChange }: HudProps) => {
   return (
     <div id="ui-layer">
       <div className="fps-counter">FPS: {fps}</div>
@@ -18,4 +18,4 @@ const HUD = ({ isLocked, fps, onBlockChange }: HUDProps) => {
   );
 };
 
-export default HUD;
+export default Hud;

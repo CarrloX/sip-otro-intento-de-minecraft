@@ -101,10 +101,12 @@ export const useWorld = (
     worldDataRef.current.set(key, type); // Persist
     loadedBlocksRef.current.set(key, type); // Update mathematical grid
 
-    if (!chunkBlocksRef.current.has(chunkId)) {
-        chunkBlocksRef.current.set(chunkId, new Set());
+    let chunkSet = chunkBlocksRef.current.get(chunkId);
+    if (!chunkSet) {
+        chunkSet = new Set();
+        chunkBlocksRef.current.set(chunkId, chunkSet);
     }
-    chunkBlocksRef.current.get(chunkId)!.add(key);
+    chunkSet.add(key);
 
     buildChunkMesh(chunkId);
     // Note: To be perfect, we should also rebuild neighbor chunks if placed on a border,
