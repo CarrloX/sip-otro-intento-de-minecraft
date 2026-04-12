@@ -155,8 +155,18 @@ export const useWorld = (
     }
     chunkSet.add(key);
 
+    // --- CLIENT-SIDE PREDICTION (INSTANT VISUAL FEEDBACK) ---
+    // Agregamos un bloque falso temporal para que sientas que el servidor responde el 100% de las veces al instante
+    const chunkMesh = chunkMeshesRef.current.get(chunkId);
+    if (chunkMesh && blockGeometryRef.current && materialsRef.current?.[1]) {
+        const tempMesh = new THREE.Mesh(blockGeometryRef.current, materialsRef.current[1]);
+        tempMesh.position.set(rx, ry, rz);
+        // Este bloque se eliminará automáticamente cuando el trabajador sobrescriba todo el chunk
+        chunkMesh.add(tempMesh); 
+    }
+
     requestChunkMesh(Math.floor(rx / CHUNK_SIZE), Math.floor(rz / CHUNK_SIZE), loadedChunksRef.current.get(chunkId) || 0);
-  }, [requestChunkMesh]);
+  }, [requestChunkMesh, blockGeometryRef, materialsRef]);
 
   const removeBlock = useCallback((x: number, y: number, z: number) => {
     const rx = Math.round(x);
@@ -169,8 +179,52 @@ export const useWorld = (
     loadedBlocksRef.current.delete(key);
     chunkBlocksRef.current.get(chunkId)?.delete(key);
 
+    // --- CLIENT-SIDE PREDICTION (INSTANT VISUAL REMOVAL) ---
+    // Encontramos matemáticamente las caras exactas del bloque basándonos en su normal y las colapsamos
+    const chunkMesh = chunkMeshesRef.current.get(chunkId);
+    if (chunkMesh && chunkMesh.children[0] instanceof THREE.Mesh) {
+       const geom = chunkMesh.children[0].geometry as THREE.BufferGeometry;
+       const pos = geom.attributes.position;
+       const norm = geom.attributes.normal;
+       if (pos && norm) {
+           const arr = pos.array as Float32Array;
+           const nArr = norm.array as Float32Array;
+           let modified = false;
+           // Iterar por grupos de 4 vértices (1 cara = 12 floats)
+           for (let i = 0; i < arr.length; i += 12) {
+               // Calcular centro geométrico de la cara plana
+               const cx = (arr[i] + arr[i+3] + arr[i+6] + arr[i+9]) / 4;
+               const cy = (arr[i+1] + arr[i+4] + arr[i+7] + arr[i+10]) / 4;
+               const cz = (arr[i+2] + arr[i+5] + arr[i+8] + arr[i+11]) / 4;
+               
+               // La normal de toda la cara
+               const nx = nArr[i], ny = nArr[i+1], nz = nArr[i+2];
+               
+               // Retroceder hacia adentro de donde apunta la normal para hallar nuestro cubo
+               const bx = Math.round(cx - nx * 0.5);
+               const by = Math.round(cy - ny * 0.5);
+               const bz = Math.round(cz - nz * 0.5);
+               
+               if (bx === rx && by === ry && bz === rz) {
+                   for (let v = 0; v < 12; v++) arr[i+v] = 0; // Colapsar cara neta
+                   modified = true;
+               }
+           }
+           if (modified) pos.needsUpdate = true;
+       }
+
+       // --- TRUCO MATEMÁTICO: TAPAR EL HOYO AL VACÍO ---
+       // Al borrar el bloque, sus vecinos aún no tienen dibujadas sus caras internas (por el Culling que ahorra Memoria).
+       // Para envitar ver el Cielo por esos 100ms, instanciamos una "Caja Invertida" (BackSide). 
+       // Nos permite ver el "interior" oscuro de ese espacio vacío funcionando de Parche visual perfecto.
+       const fakeHoleMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.BackSide });
+       const fakeHoleMesh = new THREE.Mesh(blockGeometryRef.current, fakeHoleMat);
+       fakeHoleMesh.position.set(rx, ry, rz);
+       chunkMesh.add(fakeHoleMesh);
+    }
+
     requestChunkMesh(Math.floor(rx / CHUNK_SIZE), Math.floor(rz / CHUNK_SIZE), loadedChunksRef.current.get(chunkId) || 0);
-  }, [requestChunkMesh]);
+  }, [requestChunkMesh, blockGeometryRef]);
 
   const unloadChunk = useCallback((cx: number, cz: number) => {
     const chunkId = `${cx},${cz}`;
