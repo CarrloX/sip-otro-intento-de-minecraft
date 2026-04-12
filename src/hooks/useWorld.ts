@@ -17,70 +17,125 @@ export const useWorld = (
   const worldDataRef = useRef<Map<string, number>>(new Map()); // 0 = air, 1-5 = blocks
   
   // Visuals
-  const loadedChunksRef = useRef<Set<string>>(new Set());
+  const loadedChunksRef = useRef<Map<string, number>>(new Map()); // chunkId -> lodLevel
   const chunkMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
   const playerChunkRef = useRef({ x: Infinity, z: Infinity });
+  const targetChunksRef = useRef<Map<string, number>>(new Map()); // chunkId -> desired lodLevel
 
   // Update the raycaster target array
   const updateRaycastObjects = useCallback(() => {
     const meshes: THREE.Object3D[] = [];
-    chunkMeshesRef.current.forEach(group => {
-      meshes.push(...group.children);
+    chunkMeshesRef.current.forEach((group, chunkId) => {
+      // Solo raycast en LOD 0 (alta resolución y cercano)
+      if (loadedChunksRef.current.get(chunkId) === 0) {
+        meshes.push(...group.children);
+      }
     });
     objectsRef.current = meshes;
   }, []);
 
   const lastRenderDistanceRef = useRef(renderDistanceRef.current);
 
-  const buildChunkMesh = useCallback((chunkId: string) => {
+  const buildChunkMesh = useCallback((chunkId: string, lodLevel: number = 0) => {
     const keys = chunkBlocksRef.current.get(chunkId);
     if (!keys) return;
 
     const instancesPerType: Record<number, THREE.Matrix4[]> = {};
     for (let i = 1; i <= 5; i++) instancesPerType[i] = [];
 
-    // Face Culling Logic
-    keys.forEach(key => {
-      const type = loadedBlocksRef.current.get(key);
-      if (!type) return;
+    const step = lodLevel === 0 ? 1 : lodLevel === 1 ? 2 : 4;
+    const offset = lodLevel === 0 ? 0 : lodLevel === 1 ? 0.5 : 1.5;
 
-      const [x, y, z] = key.split(',').map(Number);
+    if (lodLevel === 0) {
+      // LOD 0: Standard 1:1 Rendering with strict face culling
+      keys.forEach(key => {
+        const type = loadedBlocksRef.current.get(key);
+        if (!type) return;
+
+        const [x, y, z] = key.split(',').map(Number);
+        
+        const up = loadedBlocksRef.current.has(`${x},${y+1},${z}`);
+        const down = loadedBlocksRef.current.has(`${x},${y-1},${z}`);
+        const left = loadedBlocksRef.current.has(`${x-1},${y},${z}`);
+        const right = loadedBlocksRef.current.has(`${x+1},${y},${z}`);
+        const front = loadedBlocksRef.current.has(`${x},${y},${z+1}`);
+        const back = loadedBlocksRef.current.has(`${x},${y},${z-1}`);
+
+        // If fully surrounded, don't draw it (saves massive performance)
+        if (up && down && left && right && front && back) return;
+
+        const matrix = new THREE.Matrix4();
+        matrix.setPosition(x, y, z);
+        instancesPerType[type].push(matrix);
+      });
+    } else {
+      // LOD > 0: Downsample by clustering into large cubes (e.g. 2x2x2 or 4x4x4)
+      const processedCells = new Set<string>();
       
-      const up = loadedBlocksRef.current.has(`${x},${y+1},${z}`);
-      const down = loadedBlocksRef.current.has(`${x},${y-1},${z}`);
-      const left = loadedBlocksRef.current.has(`${x-1},${y},${z}`);
-      const right = loadedBlocksRef.current.has(`${x+1},${y},${z}`);
-      const front = loadedBlocksRef.current.has(`${x},${y},${z+1}`);
-      const back = loadedBlocksRef.current.has(`${x},${y},${z-1}`);
+      keys.forEach(key => {
+        const type = loadedBlocksRef.current.get(key);
+        if (!type) return;
 
-      // If fully surrounded, don't draw it (saves massive performance)
-      if (up && down && left && right && front && back) return;
-
-      const matrix = new THREE.Matrix4();
-      matrix.setPosition(x, y, z);
-      instancesPerType[type].push(matrix);
-    });
+        const [x, y, z] = key.split(',').map(Number);
+        
+        // Find base coordinates of the larger cube inside the virtual 3D grid
+        const bx = Math.floor(x / step) * step;
+        const by = Math.floor(y / step) * step;
+        const bz = Math.floor(z / step) * step;
+        const cellKey = `${bx},${by},${bz}`;
+        
+        if (processedCells.has(cellKey)) return;
+        
+        // Minor optimization: rough culling to skip completely buried clusters
+        const up = loadedBlocksRef.current.has(`${x},${y+1},${z}`);
+        const down = loadedBlocksRef.current.has(`${x},${y-1},${z}`);
+        const left = loadedBlocksRef.current.has(`${x-1},${y},${z}`);
+        const right = loadedBlocksRef.current.has(`${x+1},${y},${z}`);
+        const front = loadedBlocksRef.current.has(`${x},${y},${z+1}`);
+        const back = loadedBlocksRef.current.has(`${x},${y},${z-1}`);
+        
+        if (up && down && left && right && front && back) return;
+        
+        processedCells.add(cellKey);
+        
+        const matrix = new THREE.Matrix4();
+        matrix.makeScale(step, step, step);
+        matrix.setPosition(bx + offset, by + offset, bz + offset);
+        instancesPerType[type].push(matrix);
+      });
+    }
 
     const chunkGroup = new THREE.Group();
     chunkGroup.userData = { chunkId };
 
     Object.entries(instancesPerType).forEach(([typeStr, matrices]) => {
-      const type = Number(typeStr);
-      if (matrices.length === 0) return;
+        const type = Number(typeStr);
+        if (matrices.length === 0) return;
 
-      const material = materialsRef.current[type];
-      if (!material) return;
+        const material = materialsRef.current[type];
+        if (!material) return;
 
-      const instancedMesh = new THREE.InstancedMesh(blockGeometryRef.current, material, matrices.length);
-      instancedMesh.castShadow = true;
-      instancedMesh.receiveShadow = true;
-      
-      for (let i = 0; i < matrices.length; i++) {
-        instancedMesh.setMatrixAt(i, matrices[i]);
-      }
-      instancedMesh.instanceMatrix.needsUpdate = true;
-      instancedMesh.computeBoundingSphere(); // Fixes invisibility and unclickable blocks
-      chunkGroup.add(instancedMesh);
+        const instancedMesh = new THREE.InstancedMesh(blockGeometryRef.current, material, matrices.length);
+        
+        // LOD > 0 saves drawing shadows
+        if (lodLevel === 0) {
+          instancedMesh.castShadow = true;
+          instancedMesh.receiveShadow = true;
+        } else {
+          instancedMesh.castShadow = false;
+          instancedMesh.receiveShadow = false;
+        }
+        
+        for (let i = 0; i < matrices.length; i++) {
+          instancedMesh.setMatrixAt(i, matrices[i]);
+        }
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        
+        if (lodLevel === 0) {
+          instancedMesh.computeBoundingSphere(); // Fixes invisibility and unclickable blocks
+        }
+        
+        chunkGroup.add(instancedMesh);
     });
 
     const oldGroup = chunkMeshesRef.current.get(chunkId);
@@ -111,9 +166,7 @@ export const useWorld = (
     }
     chunkSet.add(key);
 
-    buildChunkMesh(chunkId);
-    // Note: To be perfect, we should also rebuild neighbor chunks if placed on a border,
-    // but building the current chunk is enough for the MVP occlusion fix.
+    buildChunkMesh(chunkId, loadedChunksRef.current.get(chunkId) || 0);
   }, [buildChunkMesh]);
 
   const removeBlock = useCallback((x: number, y: number, z: number) => {
@@ -127,10 +180,10 @@ export const useWorld = (
     loadedBlocksRef.current.delete(key);
     chunkBlocksRef.current.get(chunkId)?.delete(key);
 
-    buildChunkMesh(chunkId);
+    buildChunkMesh(chunkId, loadedChunksRef.current.get(chunkId) || 0);
   }, [buildChunkMesh]);
 
-  const loadChunk = useCallback((cx: number, cz: number) => {
+  const loadChunk = useCallback((cx: number, cz: number, initialLod: number = 0) => {
     const chunkId = `${cx},${cz}`;
     if (loadedChunksRef.current.has(chunkId)) return;
     
@@ -140,10 +193,10 @@ export const useWorld = (
     // Associate new blocks with this chunk exactly as they were generated, 
     // even if they spill over the mathematical boundary (like tree leaves)
     chunkBlocksRef.current.set(chunkId, new Set(generatedKeys));
+    loadedChunksRef.current.set(chunkId, initialLod);
 
     // Build Graphics
-    buildChunkMesh(chunkId);
-    loadedChunksRef.current.add(chunkId);
+    buildChunkMesh(chunkId, initialLod);
   }, [buildChunkMesh]);
 
   const unloadChunk = useCallback((cx: number, cz: number) => {
@@ -173,30 +226,83 @@ export const useWorld = (
     const px = Math.floor(cameraPosition.x / CHUNK_SIZE);
     const pz = Math.floor(cameraPosition.z / CHUNK_SIZE);
 
+    // 1. Target Phase: If player moved chunk boundary, rebuild target state
     if (px !== playerChunkRef.current.x || pz !== playerChunkRef.current.z || loadedChunksRef.current.size === 0 || lastRenderDistanceRef.current !== RENDER_DISTANCE) {
       playerChunkRef.current = { x: px, z: pz };
       lastRenderDistanceRef.current = RENDER_DISTANCE;
-      const newActiveChunks = new Set<string>();
+      const newTargetChunks = new Map<string, number>();
 
       for(let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++){
         for(let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++){
           const cx = px + dx;
           const cz = pz + dz;
-          loadChunk(cx, cz);
-          newActiveChunks.add(`${cx},${cz}`);
+          
+          // Nivel de LOD basado estrictamente en el grid de la posición del jugador
+          const distance = Math.max(Math.abs(dx), Math.abs(dz));
+          let lodLevel = 0;
+          if (distance > 10) {
+             lodLevel = 2; // 11+ chunks away
+          } else if (distance > 4) {
+             lodLevel = 1; // 5-10 chunks away
+          }
+
+          const chunkId = `${cx},${cz}`;
+          newTargetChunks.set(chunkId, lodLevel);
         }
       }
-
-      const chunksToUnload: {x: number, z: number}[] = [];
-      loadedChunksRef.current.forEach(chunkId => {
-         if (!newActiveChunks.has(chunkId)) {
-             const [ccx, ccz] = chunkId.split(',').map(Number);
-             chunksToUnload.push({x: ccx, z: ccz});
-         }
-      });
-      chunksToUnload.forEach(c => unloadChunk(c.x, c.z));
+      targetChunksRef.current = newTargetChunks;
     }
-  }, [loadChunk, unloadChunk]);
+
+    // 2. Reconcile Phase: Process max 1 heavy chunk operation per frame to completely eliminate stutters
+    let operationsRemaining = 1;
+
+    // First priority: Unload out-of-bounds chunks (fast, frees memory for incoming chunks)
+    for (const chunkId of loadedChunksRef.current.keys()) {
+       if (!targetChunksRef.current.has(chunkId)) {
+           const [ccx, ccz] = chunkId.split(',').map(Number);
+           unloadChunk(ccx, ccz);
+           operationsRemaining--;
+           if (operationsRemaining <= 0) return;
+       }
+    }
+
+    // Second priority: Load or Rebuild LOD 0 chunks (immediate surroundings)
+    for (const [chunkId, targetLod] of targetChunksRef.current.entries()) {
+       if (targetLod !== 0) continue; // Skip distant chunks for now
+       
+       const currentLod = loadedChunksRef.current.get(chunkId);
+       if (currentLod === undefined) {
+           const [ccx, ccz] = chunkId.split(',').map(Number);
+           loadChunk(ccx, ccz, targetLod);
+           operationsRemaining--;
+           if (operationsRemaining <= 0) return;
+       } else if (currentLod !== targetLod) {
+           loadedChunksRef.current.set(chunkId, targetLod);
+           buildChunkMesh(chunkId, targetLod);
+           operationsRemaining--;
+           if (operationsRemaining <= 0) return;
+       }
+    }
+
+    // Third priority: Load or Rebuild distant LOD 1 & 2 chunks
+    for (const [chunkId, targetLod] of targetChunksRef.current.entries()) {
+       if (targetLod === 0) continue; // Already handled
+       
+       const currentLod = loadedChunksRef.current.get(chunkId);
+       if (currentLod === undefined) {
+           const [ccx, ccz] = chunkId.split(',').map(Number);
+           loadChunk(ccx, ccz, targetLod);
+           operationsRemaining--;
+           if (operationsRemaining <= 0) return;
+       } else if (currentLod !== targetLod) {
+           loadedChunksRef.current.set(chunkId, targetLod);
+           buildChunkMesh(chunkId, targetLod);
+           operationsRemaining--;
+           if (operationsRemaining <= 0) return;
+       }
+    }
+
+  }, [loadChunk, unloadChunk, buildChunkMesh]);
 
   return React.useMemo(() => ({
     objectsRef,
