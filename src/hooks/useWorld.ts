@@ -2,6 +2,7 @@ import React, { useRef, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 import { CHUNK_SIZE } from '../services/WorldService';
 import ChunkWorker from '../workers/ChunkWorker?worker';
+import { initDB, saveBlock, loadAllBlocks } from '../services/StorageService';
 
 export const useWorld = (
   sceneRef: React.RefObject<THREE.Scene | null>,
@@ -13,27 +14,63 @@ export const useWorld = (
   
   const loadedBlocksRef = useRef<Map<string, number>>(new Map()); 
   const chunkBlocksRef = useRef<Map<string, Set<string>>>(new Map()); 
-  const worldDataRef = useRef<Map<string, number>>(new Map()); 
+  const worldDataRef = useRef<Map<string, Map<string, number>>>(new Map()); 
   
+  const getChunkId = (x: number, z: number) => {
+    return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
+  };
   const loadedChunksRef = useRef<Map<string, number>>(new Map()); 
   const chunkMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
   const playerChunkRef = useRef({ x: Infinity, z: Infinity });
   const targetChunksRef = useRef<Map<string, number>>(new Map());
+  const chunkCacheRef = useRef<Map<string, { group: THREE.Group, lodLevel: number, blockKeys: Set<string>, blocks: Map<string, number> }>>(new Map());
+  const MAX_CACHE_SIZE = 100;
+  const loadQueue = useRef<{ccx: number, ccz: number, targetLod: number}[]>([]);
+  const MAX_LOADS_PER_FRAME = 2; 
 
   const workersRef = useRef<Worker[]>([]);
-  const workerCallbacksRef = useRef<Map<string, (data: any) => void>>(new Map());
+  const workerCallbacksRef = useRef<Map<number, (data: any) => void>>(new Map());
+  const nextTaskIdRef = useRef<number>(0);
+  const dbRef = useRef<IDBDatabase | null>(null);
 
   useEffect(() => {
+    const setup = async () => {
+      try {
+        const db = await initDB();
+        dbRef.current = db;
+        const savedData = await loadAllBlocks(db);
+        savedData.forEach((type, key) => {
+           const [x, , z] = key.split(',').map(Number);
+           const cid = getChunkId(x, z);
+           let modMap = worldDataRef.current.get(cid);
+           if (!modMap) {
+               modMap = new Map();
+               worldDataRef.current.set(cid, modMap);
+           }
+           modMap.set(key, type);
+        });
+        console.log(`Loaded ${savedData.size} blocks from storage.`);
+        // Initial chunk management will happen after loading
+        if (sceneRef.current) {
+            // Force first check
+            playerChunkRef.current = { x: Infinity, z: Infinity };
+        }
+      } catch (err) {
+        console.error("Failed to load world from storage:", err);
+      }
+    };
+    setup();
+
     if (workersRef.current.length === 0) {
       for (let i = 0; i < 4; i++) {
         const worker = new ChunkWorker();
         worker.onmessage = (e) => {
            const { response, posArray, normArray, uvArray, indArray, colorArray } = e.data;
-           const chunkId = `${response.cx},${response.cz}`;
-           const callback = workerCallbacksRef.current.get(chunkId);
+           const taskId = response.taskId;
+           const callback = workerCallbacksRef.current.get(taskId);
            if (callback) {
                callback({ response, posArray, normArray, uvArray, indArray, colorArray });
-               workerCallbacksRef.current.delete(chunkId);
+               workerCallbacksRef.current.delete(taskId);
            }
         };
         workersRef.current.push(worker);
@@ -63,17 +100,48 @@ export const useWorld = (
   const requestChunkMesh = useCallback((cx: number, cz: number, lodLevel: number = 0) => {
      const chunkId = `${cx},${cz}`;
      
+     // 1. Check Cache first
+     const cached = chunkCacheRef.current.get(chunkId);
+     if (cached && cached.lodLevel === lodLevel) {
+         const oldGroup = chunkMeshesRef.current.get(chunkId);
+         if (oldGroup) {
+            sceneRef.current?.remove(oldGroup);
+            oldGroup.children.forEach(child => {
+               if (child instanceof THREE.Mesh) child.geometry.dispose();
+            });
+         }
+
+         sceneRef.current?.add(cached.group);
+         chunkMeshesRef.current.set(chunkId, cached.group);
+         
+         // Restore Blocks for Collisions
+         chunkBlocksRef.current.set(chunkId, cached.blockKeys);
+         cached.blocks.forEach((type, key) => {
+             loadedBlocksRef.current.set(key, type);
+         });
+
+         chunkCacheRef.current.delete(chunkId);
+         updateRaycastObjects();
+         return;
+     }
+
+     // 2. Fetch only modifications for this chunk (and neighbors for trees/light)
      const userModsArray: [string, number][] = [];
-     worldDataRef.current.forEach((val, key) => {
-         const [kx, , kz] = key.split(',').map(Number);
-         const mcx = Math.floor(kx / CHUNK_SIZE);
-         const mcz = Math.floor(kz / CHUNK_SIZE);
-         if (mcx >= cx - 1 && mcx <= cx + 1 && mcz >= cz - 1 && mcz <= cz + 1) {
-            userModsArray.push([key, val]);
+     const neighbors = [[0,0], [1,0], [-1,0], [0,1], [0,-1], [1,1], [1,-1], [-1,1], [-1,-1]];
+     
+     neighbors.forEach(([dx, dz]) => {
+         const nid = `${cx + dx},${cz + dz}`;
+         const nModMap = worldDataRef.current.get(nid);
+         if (nModMap) {
+             nModMap.forEach((type, key) => {
+                 userModsArray.push([key, type]);
+             });
          }
      });
 
-     workerCallbacksRef.current.set(chunkId, ({ response, posArray, normArray, uvArray, indArray, colorArray }) => {
+     const taskId = nextTaskIdRef.current++;
+
+     workerCallbacksRef.current.set(taskId, ({ response, posArray, normArray, uvArray, indArray, colorArray }) => {
          // Protección crítica: Si el jugador se movió o rotó rápidamente mientras el chunk se procesaba en el worker
          // y este chunk resultante ya no se necesita, descartamos la geometría para evitar un Memory Leak inborrable
          if (targetChunksRef.current.get(chunkId) !== response.lodLevel) return;
@@ -104,7 +172,7 @@ export const useWorld = (
          
          const chunkCenterX = response.cx * CHUNK_SIZE + (CHUNK_SIZE / 2);
          const chunkCenterZ = response.cz * CHUNK_SIZE + (CHUNK_SIZE / 2);
-         geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(chunkCenterX, 128, chunkCenterZ), 140);
+         geometry.computeBoundingSphere();
 
          const mesh = new THREE.Mesh(geometry, unifiedMaterial);
 
@@ -133,7 +201,7 @@ export const useWorld = (
 
      const worker = getAvailableWorker();
      if (worker) {
-         worker.postMessage({ cx, cz, lodLevel, userModsArray });
+         worker.postMessage({ cx, cz, lodLevel, userModsArray, taskId });
      }
   }, [materialsRef, sceneRef, updateRaycastObjects]);
 
@@ -143,17 +211,26 @@ export const useWorld = (
     const ry = Math.round(y);
     const rz = Math.round(z);
     const key = `${rx},${ry},${rz}`;
-    const chunkId = `${Math.floor(rx / CHUNK_SIZE)},${Math.floor(rz / CHUNK_SIZE)}`;
+    const chunkId = getChunkId(rx, rz);
 
-    worldDataRef.current.set(key, type); 
+    let modMap = worldDataRef.current.get(chunkId);
+    if (!modMap) {
+        modMap = new Map();
+        worldDataRef.current.set(chunkId, modMap);
+    }
+    modMap.set(key, type);
+
     loadedBlocksRef.current.set(key, type); 
-
     let chunkSet = chunkBlocksRef.current.get(chunkId);
     if (!chunkSet) {
         chunkSet = new Set();
         chunkBlocksRef.current.set(chunkId, chunkSet);
     }
     chunkSet.add(key);
+
+    if (dbRef.current) {
+        saveBlock(dbRef.current, key, type).catch(console.error);
+    }
 
     // --- CLIENT-SIDE PREDICTION (INSTANT VISUAL FEEDBACK) ---
     // Agregamos un bloque falso temporal para que sientas que el servidor responde el 100% de las veces al instante
@@ -173,11 +250,21 @@ export const useWorld = (
     const ry = Math.round(y);
     const rz = Math.round(z);
     const key = `${rx},${ry},${rz}`;
-    const chunkId = `${Math.floor(rx / CHUNK_SIZE)},${Math.floor(rz / CHUNK_SIZE)}`;
+    const chunkId = getChunkId(rx, rz);
 
-    worldDataRef.current.set(key, 0); 
+    let modMap = worldDataRef.current.get(chunkId);
+    if (!modMap) {
+        modMap = new Map();
+        worldDataRef.current.set(chunkId, modMap);
+    }
+    modMap.set(key, 0);
+
     loadedBlocksRef.current.delete(key);
     chunkBlocksRef.current.get(chunkId)?.delete(key);
+
+    if (dbRef.current) {
+        saveBlock(dbRef.current, key, 0).catch(console.error);
+    }
 
     // --- CLIENT-SIDE PREDICTION (INSTANT VISUAL REMOVAL) ---
     // Encontramos matemáticamente las caras exactas del bloque basándonos en su normal y las colapsamos
@@ -235,9 +322,39 @@ export const useWorld = (
       sceneRef.current?.remove(group);
       chunkMeshesRef.current.delete(chunkId);
       
-      group.children.forEach(child => {
-        if (child instanceof THREE.Mesh) child.geometry.dispose();
+      const lodLevel = loadedChunksRef.current.get(chunkId) ?? 0;
+      
+      // Capture blocks before they are deleted from main refs
+      const blockKeys = chunkBlocksRef.current.get(chunkId);
+      const blocks = new Map<string, number>();
+      if (blockKeys) {
+          blockKeys.forEach(k => {
+              const t = loadedBlocksRef.current.get(k);
+              if (t !== undefined) blocks.set(k, t);
+          });
+      }
+
+      // Move to cache instead of disposing
+      chunkCacheRef.current.set(chunkId, { 
+          group, 
+          lodLevel, 
+          blockKeys: blockKeys ? new Set(blockKeys) : new Set(), 
+          blocks 
       });
+      
+      // Limit cache size
+      if (chunkCacheRef.current.size > MAX_CACHE_SIZE) {
+          const firstKey = chunkCacheRef.current.keys().next().value;
+          if (firstKey) {
+              const old = chunkCacheRef.current.get(firstKey);
+              if (old) {
+                  old.group.children.forEach(child => {
+                      if (child instanceof THREE.Mesh) child.geometry.dispose();
+                  });
+              }
+              chunkCacheRef.current.delete(firstKey);
+          }
+      }
     }
 
     const keys = chunkBlocksRef.current.get(chunkId);
@@ -262,25 +379,54 @@ export const useWorld = (
           const cx = px + dx;
           const cz = pz + dz;
           const distance = Math.max(Math.abs(dx), Math.abs(dz));
-          const lodLevel = distance > 10 ? 2 : (distance > 4 ? 1 : 0);
+          
+          let lodLevel = distance > 10 ? 2 : (distance > 4 ? 1 : 0);
+          
+          // HYSTERESIS: If already loaded, keep current LOD unless distance is significant
+          const currentLod = loadedChunksRef.current.get(`${cx},${cz}`);
+          if (currentLod !== undefined) {
+              if (currentLod === 0 && distance === 5) lodLevel = 0; // Expand LOD 0 by 1 block buffer
+              if (currentLod === 1 && distance === 11) lodLevel = 1; // Expand LOD 1 by 1 block buffer
+          }
+
           newTargetChunks.set(`${cx},${cz}`, lodLevel);
         }
       }
       targetChunksRef.current = newTargetChunks;
     };
-
+ 
     const processLoads = (isLodZeroPhase: boolean) => {
+      // Pass 1: Add to queue
       for (const [chunkId, targetLod] of targetChunksRef.current.entries()) {
          if (isLodZeroPhase ? targetLod !== 0 : targetLod === 0) continue; 
          
          const currentLod = loadedChunksRef.current.get(chunkId);
          if (currentLod === undefined || currentLod !== targetLod) {
+             // Avoid duplicate queuing
+             if (loadQueue.current.some(q => `${q.ccx},${q.ccz}` === chunkId)) continue;
+
+             loadQueue.current.push({
+                 ccx: Number(chunkId.split(',')[0]),
+                 ccz: Number(chunkId.split(',')[1]),
+                 targetLod
+             });
+             // Mark as "loading" via currentLod check in next pass? 
+             // Actually, set to targetLod now to prevent double-processing until mesh arrives
              loadedChunksRef.current.set(chunkId, targetLod); 
-             const [ccx, ccz] = chunkId.split(',').map(Number);
-             requestChunkMesh(ccx, ccz, targetLod);
          }
       }
     };
+
+    const flushQueue = () => {
+        let loads = 0;
+        // Sort queue by distance to player for priority? (Optional improvement)
+        while (loadQueue.current.length > 0 && loads < MAX_LOADS_PER_FRAME) {
+            const { ccx, ccz, targetLod } = loadQueue.current.shift()!;
+            requestChunkMesh(ccx, ccz, targetLod);
+            loads++;
+        }
+    };
+
 
     if (px !== playerChunkRef.current.x || pz !== playerChunkRef.current.z || loadedChunksRef.current.size === 0 || lastRenderDistanceRef.current !== RENDER_DISTANCE) {
       playerChunkRef.current = { x: px, z: pz };
@@ -297,7 +443,8 @@ export const useWorld = (
 
     processLoads(true);
     processLoads(false);
-
+    flushQueue();
+ 
   }, [requestChunkMesh, unloadChunk]);
 
   return React.useMemo(() => ({

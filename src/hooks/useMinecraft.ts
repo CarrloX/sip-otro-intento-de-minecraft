@@ -159,6 +159,41 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
         player.update(delta, camera, controls);
         world.manageChunks(camera.position);
         
+        // Update Debug Coordinates
+        const posX = camera.position.x;
+        const posY = camera.position.y;
+        const posZ = camera.position.z;
+        
+        const xyzEl = document.getElementById('debug-xyz');
+        if (xyzEl) xyzEl.innerText = `XYZ: ${posX.toFixed(3)} / ${posY.toFixed(5)} / ${posZ.toFixed(3)}`;
+
+        const blockEl = document.getElementById('debug-block');
+        if (blockEl) blockEl.innerText = `Block: ${Math.floor(posX)} ${Math.floor(posY)} ${Math.floor(posZ)}`;
+
+        const chunkX = Math.floor(posX / 16);
+        const chunkY = Math.floor(posY / 16);
+        const chunkZ = Math.floor(posZ / 16);
+        const chunkRx = Math.floor(posX) & 15;
+        const chunkRy = Math.floor(posY) & 15;
+        const chunkRz = Math.floor(posZ) & 15;
+        const chunkEl = document.getElementById('debug-chunk');
+        if (chunkEl) chunkEl.innerText = `Chunk: ${chunkRx} ${chunkRy} ${chunkRz} in ${chunkX} ${chunkY} ${chunkZ}`;
+
+        const facingEl = document.getElementById('debug-facing');
+        if (facingEl) {
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            let facing = "Unknown";
+            if (Math.abs(dir.x) > Math.abs(dir.z)) {
+                if (dir.x > 0) facing = "east (Towards positive X)";
+                else facing = "west (Towards negative X)";
+            } else {
+                if (dir.z > 0) facing = "south (Towards positive Z)";
+                else facing = "north (Towards negative Z)";
+            }
+            facingEl.innerText = `Facing: ${facing}`;
+        }
+
         worldTime += delta * TIME_SPEED;
         updateLighting(scene, lightingSystem, worldTime, camera.position, renderDistanceRef.current);
 

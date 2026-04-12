@@ -20,7 +20,15 @@ interface HudProps {
 const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, onMenuToggle }: HudProps) => {
   return (
     <div id="ui-layer">
-      <div className="fps-counter">FPS: {fps}</div>
+      <div className="debug-info">
+        <div>Minecraft 1.0.0 (Custom Engine)</div>
+        <div>{Math.round(fps)} fps</div>
+        <br/>
+        <div id="debug-xyz">XYZ: 0.000 / 0.000 / 0.000</div>
+        <div id="debug-block">Block: 0 0 0</div>
+        <div id="debug-chunk">Chunk: 0 0 0</div>
+        <div id="debug-facing">Facing: Unknown</div>
+      </div>
       <Crosshair isVisible={isLocked && !isMenuOpen} />
       <Hotbar isVisible={isLocked && !isMenuOpen} onBlockChange={onBlockChange} />
       

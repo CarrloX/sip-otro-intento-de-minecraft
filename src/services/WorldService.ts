@@ -21,7 +21,7 @@ const generateBlockColumn = (
   z: number,
   surfaceY: number,
   loadedBlocks: Map<string, number>,
-  worldData: Map<string, number>,
+  chunkWorldData: Map<string, number>,
   generatedKeys: string[]
 ) => {
   const depth = 64; // Minecraft-like depth
@@ -29,7 +29,7 @@ const generateBlockColumn = (
     const key = `${x},${y},${z}`;
     
     // Check for user modifications
-    const modType = worldData.get(key);
+    const modType = chunkWorldData.get(key);
     if (modType !== undefined) {
       if (modType !== 0) {
         loadedBlocks.set(key, modType);
@@ -49,7 +49,7 @@ export const generateChunk = (
   chunkX: number,
   chunkZ: number,
   loadedBlocks: Map<string, number>,
-  worldData: Map<string, number>
+  chunkWorldData: Map<string, number>
 ): string[] => {
   const generatedKeys: string[] = [];
   const startX = chunkX * CHUNK_SIZE;
@@ -59,29 +59,23 @@ export const generateChunk = (
     for (let z = startZ; z < startZ + CHUNK_SIZE; z++) {
       const surfaceY = noise(x, z);
       
-      generateBlockColumn(x, z, surfaceY, loadedBlocks, worldData, generatedKeys);
+      generateBlockColumn(x, z, surfaceY, loadedBlocks, chunkWorldData, generatedKeys);
 
       if (pseudoRandom(x, z) < 0.02) {
-        generateTree(x, surfaceY + 1, z, loadedBlocks, worldData, generatedKeys);
+        generateTree(x, surfaceY + 1, z, loadedBlocks, chunkWorldData, generatedKeys);
       }
     }
   }
 
   // Final Pass: Ensure ALL user modifications in this chunk are captured
-  worldData.forEach((type, key) => {
-    const [x, , z] = key.split(',').map(Number);
-    const cx = Math.floor(x / CHUNK_SIZE);
-    const cz = Math.floor(z / CHUNK_SIZE);
-
-    if (cx === chunkX && cz === chunkZ) {
-      if (type === 0) {
-        loadedBlocks.delete(key);
-        const index = generatedKeys.indexOf(key);
-        if (index > -1) generatedKeys.splice(index, 1);
-      } else if (!loadedBlocks.has(key)) {
-        loadedBlocks.set(key, type);
-        generatedKeys.push(key);
-      }
+  chunkWorldData.forEach((type, key) => {
+    if (type === 0) {
+      loadedBlocks.delete(key);
+      const index = generatedKeys.indexOf(key);
+      if (index > -1) generatedKeys.splice(index, 1);
+    } else if (!loadedBlocks.has(key)) {
+      loadedBlocks.set(key, type);
+      generatedKeys.push(key);
     }
   });
 
@@ -91,10 +85,10 @@ export const generateChunk = (
 const addLeafBlock = (
   key: string,
   loadedBlocks: Map<string, number>,
-  worldData: Map<string, number>,
+  chunkWorldData: Map<string, number>,
   generatedKeys: string[]
 ) => {
-  const modType = worldData.get(key);
+  const modType = chunkWorldData.get(key);
   
   if (modType === undefined) {
     loadedBlocks.set(key, 5); // Default leaf
@@ -111,7 +105,7 @@ const generateLeaves = (
   centerZ: number,
   height: number,
   loadedBlocks: Map<string, number>,
-  worldData: Map<string, number>,
+  chunkWorldData: Map<string, number>,
   generatedKeys: string[]
 ) => {
   for (let hx = centerX - 2; hx <= centerX + 2; hx++) {
@@ -121,7 +115,7 @@ const generateLeaves = (
         const isCornerTop = dist === 4 && hy === centerY + height + 1;
         if (isCornerTop) continue;
         
-        addLeafBlock(`${hx},${hy},${hz}`, loadedBlocks, worldData, generatedKeys);
+        addLeafBlock(`${hx},${hy},${hz}`, loadedBlocks, chunkWorldData, generatedKeys);
       }
     }
   }
@@ -132,13 +126,13 @@ export const generateTree = (
   y: number,
   z: number,
   loadedBlocks: Map<string, number>,
-  worldData: Map<string, number>,
+  chunkWorldData: Map<string, number>,
   generatedKeys: string[]
 ) => {
   const height = 4;
   for (let i = 0; i < height; i++) {
     const key = `${x},${y + i},${z}`;
-    const modType = worldData.get(key);
+    const modType = chunkWorldData.get(key);
     
     if (modType === undefined) {
        loadedBlocks.set(key, 4); // Default log
@@ -149,5 +143,5 @@ export const generateTree = (
     }
   }
   
-  generateLeaves(x, y, z, height, loadedBlocks, worldData, generatedKeys);
+  generateLeaves(x, y, z, height, loadedBlocks, chunkWorldData, generatedKeys);
 };

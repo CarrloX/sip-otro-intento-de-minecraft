@@ -19,7 +19,7 @@ const getTexIndex = (blockType: number, face: string): number => {
 };
 
 self.onmessage = (e) => {
-  const { cx, cz, lodLevel, userModsArray } = e.data;
+  const { cx, cz, lodLevel, userModsArray, taskId } = e.data;
   
   const worldData = new Map<string, number>(userModsArray);
   const loadedBlocks = new Map<string, number>();
@@ -262,7 +262,8 @@ self.onmessage = (e) => {
   const response = {
      cx, cz, lodLevel,
      generatedKeys,
-     exportedBlocks
+     exportedBlocks,
+     taskId
   };
   
   self.postMessage({ response, posArray, normArray, uvArray, indArray, colorArray }, { transfer: [posArray.buffer, normArray.buffer, uvArray.buffer, indArray.buffer, colorArray.buffer] });
