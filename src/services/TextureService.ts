@@ -50,85 +50,15 @@ export const generateAtlas = () => {
 export const createUnifiedMaterial = () => {
   const atlasTexture = generateAtlas();
   
+  // Al usar Geometria Voxel pura con UVs explícitas, ya no necesitamos hackear shaders de GPU
   const material = new THREE.MeshLambertMaterial({ 
      map: atlasTexture,
   });
 
-  // GLSL Shader Injection to read InstancedBufferAttribute and shift UVs
-  material.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <common>',
-      `
-      #include <common>
-      attribute float aBlockType;
-      varying float vBlockType;
-      varying vec3 vLocalNormal;
-      `
-    ).replace(
-      '#include <begin_vertex>',
-      `
-      #include <begin_vertex>
-      vBlockType = aBlockType;
-      vLocalNormal = normal; // Unmodified local face normal for directional detection
-      `
-    );
-
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <common>',
-      `
-      #include <common>
-      varying float vBlockType;
-      varying vec3 vLocalNormal;
-      `
-    ).replace(
-      '#include <map_fragment>',
-      `
-      #ifdef USE_MAP
-        // Atlas has 6 textures. Each takes 1/6th of horizontal width.
-        float blockType = floor(vBlockType + 0.5);
-        float texIndex = 0.0;
-        
-        // Block Types:
-        // 1: Grass (Top 1, Side 0, Bottom 0)
-        // 2: Dirt (All 0)
-        // 3: Stone (All 2)
-        // 4: Wood (Top/Bot 4, Side 3)
-        // 5: Leaves (All 5)
-        
-        if (blockType == 1.0) {
-           if (vLocalNormal.y > 0.5) texIndex = 1.0;
-           else texIndex = 0.0;
-        } else if (blockType == 2.0) {
-           texIndex = 0.0;
-        } else if (blockType == 3.0) {
-           texIndex = 2.0;
-        } else if (blockType == 4.0) {
-           if (abs(vLocalNormal.y) > 0.5) texIndex = 4.0;
-           else texIndex = 3.0;
-        } else if (blockType == 5.0) {
-           texIndex = 5.0;
-        }
-        
-        // Calulate atlas-mapped UVs. Width is divided by 6
-        vec2 atlasUv = vec2((vMapUv.x + texIndex) / 6.0, vMapUv.y);
-        
-        vec4 sampledDiffuseColor = texture2D( map, atlasUv );
-        #ifdef DECODE_VIDEO_TEXTURE
-          sampledDiffuseColor = vec4( mix( pow( sampledDiffuseColor.rgb * 0.9478672986 + vec3( 0.0521327014 ), vec3( 2.4 ) ), sampledDiffuseColor.rgb * 0.0773993808, vec3( lessThanEqual( sampledDiffuseColor.rgb, vec3( 0.04045 ) ) ) ), sampledDiffuseColor.w );
-        #endif
-        diffuseColor *= sampledDiffuseColor;
-      #endif
-      `
-    );
-
-    return shader;
-  };
-
   return material;
 };
 
-// Keeping the original returned shape so the rest of the app doesn't break, 
-// simply point every ID index to our Unified Material Canvas.
+// Return Record with all IDs pointing to isolated material for backwards compatibility in GameCanvas
 export const createMaterials = () => {
   const unifiedMaterial = createUnifiedMaterial();
   const materials: Record<number, THREE.Material | THREE.Material[]> = {};

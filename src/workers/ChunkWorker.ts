@@ -1,4 +1,81 @@
-import { CHUNK_SIZE, generateChunk } from '../services/WorldService';
+import { generateChunk } from '../services/WorldService';
+
+// Atlas UV mappings
+const ATLAS_COLS = 6;
+const getTexIndex = (blockType: number, face: string): number => {
+  if (blockType === 1) { // Grass
+    if (face === 'top') return 1;
+    if (face === 'bottom') return 0;
+    return 0; // Sides
+  }
+  if (blockType === 2) return 0; // Dirt
+  if (blockType === 3) return 2; // Stone
+  if (blockType === 4) { // Wood
+    if (face === 'top' || face === 'bottom') return 4;
+    return 3;
+  }
+  if (blockType === 5) return 5; // Leaves
+  return 0;
+};
+
+const pushQuad = (
+  positions: number[], normals: number[], uvs: number[], indices: number[],
+  cx: number, cy: number, cz: number, h: number,
+  face: string, blockType: number
+) => {
+  const texIndex = getTexIndex(blockType, face);
+  const u0 = texIndex / ATLAS_COLS;
+  const u1 = (texIndex + 1) / ATLAS_COLS;
+  const v0 = 0;
+  const v1 = 1;
+
+  const baseIndex = positions.length / 3;
+
+  switch(face) {
+    case 'front':  // +Z
+      positions.push(
+        cx-h, cy-h, cz+h,  cx+h, cy-h, cz+h,  cx+h, cy+h, cz+h,  cx-h, cy+h, cz+h
+      );
+      normals.push(0,0,1, 0,0,1, 0,0,1, 0,0,1);
+      break;
+    case 'back':   // -Z
+      positions.push(
+        cx+h, cy-h, cz-h,  cx-h, cy-h, cz-h,  cx-h, cy+h, cz-h,  cx+h, cy+h, cz-h
+      );
+      normals.push(0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1);
+      break;
+    case 'top':    // +Y
+      positions.push(
+        cx-h, cy+h, cz+h,  cx+h, cy+h, cz+h,  cx+h, cy+h, cz-h,  cx-h, cy+h, cz-h
+      );
+      normals.push(0,1,0, 0,1,0, 0,1,0, 0,1,0);
+      break;
+    case 'bottom': // -Y
+      positions.push(
+        cx-h, cy-h, cz-h,  cx+h, cy-h, cz-h,  cx+h, cy-h, cz+h,  cx-h, cy-h, cz+h
+      );
+      normals.push(0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0);
+      break;
+    case 'right':  // +X
+      positions.push(
+        cx+h, cy-h, cz+h,  cx+h, cy-h, cz-h,  cx+h, cy+h, cz-h,  cx+h, cy+h, cz+h
+      );
+      normals.push(1,0,0, 1,0,0, 1,0,0, 1,0,0);
+      break;
+    case 'left':   // -X
+      positions.push(
+        cx-h, cy-h, cz-h,  cx-h, cy-h, cz+h,  cx-h, cy+h, cz+h,  cx-h, cy+h, cz-h
+      );
+      normals.push(-1,0,0, -1,0,0, -1,0,0, -1,0,0);
+      break;
+  }
+
+  uvs.push(u0,v0, u1,v0, u1,v1, u0,v1);
+  indices.push(
+    baseIndex + 0, baseIndex + 1, baseIndex + 2,
+    baseIndex + 0, baseIndex + 2, baseIndex + 3
+  );
+};
 
 self.onmessage = (e) => {
   const { cx, cz, lodLevel, userModsArray } = e.data;
@@ -6,14 +83,26 @@ self.onmessage = (e) => {
   const worldData = new Map<string, number>(userModsArray);
   const loadedBlocks = new Map<string, number>();
 
-  // 1. Generate core mathematical data
+  // 1. Generate local grid
   const generatedKeys = generateChunk(cx, cz, loadedBlocks, worldData);
 
-  // 2. Perform Decimation & Face Culling
-  const instances: { x: number, y: number, z: number, type: number, rx: number, ry: number, rz: number, scale: number }[] = [];
+  // 2. Topology Mesher (Advanced Face Culling)
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
   
   const step = lodLevel === 0 ? 1 : lodLevel === 1 ? 2 : 4;
   const offset = lodLevel === 0 ? 0 : lodLevel === 1 ? 0.5 : 1.5;
+  const h = step * 0.5;
+
+  // Simple neighbor check
+  // Si da a aire o a Hojas (ID 5), dibujar la cara!
+  const isTransparent = (type: number | undefined, meType: number) => {
+      if (!type) return true; // Aire
+      if (type === 5 && meType !== 5) return true; // Si veo hojas y no soy hojas, dibujar mi cara
+      return false; // Bloque solido
+  };
 
   if (lodLevel === 0) {
       generatedKeys.forEach(key => {
@@ -21,16 +110,12 @@ self.onmessage = (e) => {
          if (!type) return;
          const [x, y, z] = key.split(',').map(Number);
          
-         const up = loadedBlocks.has(`${x},${y+1},${z}`);
-         const down = loadedBlocks.has(`${x},${y-1},${z}`);
-         const left = loadedBlocks.has(`${x-1},${y},${z}`);
-         const right = loadedBlocks.has(`${x+1},${y},${z}`);
-         const front = loadedBlocks.has(`${x},${y},${z+1}`);
-         const back = loadedBlocks.has(`${x},${y},${z-1}`);
-
-         if (up && down && left && right && front && back) return;
-         
-         instances.push({ x: x, y: y, z: z, type, rx: x, ry: y, rz: z, scale: 1 });
+         if (isTransparent(loadedBlocks.get(`${x},${y+1},${z}`), type)) pushQuad(positions, normals, uvs, indices, x, y, z, h, 'top', type);
+         if (isTransparent(loadedBlocks.get(`${x},${y-1},${z}`), type)) pushQuad(positions, normals, uvs, indices, x, y, z, h, 'bottom', type);
+         if (isTransparent(loadedBlocks.get(`${x-1},${y},${z}`), type)) pushQuad(positions, normals, uvs, indices, x, y, z, h, 'left', type);
+         if (isTransparent(loadedBlocks.get(`${x+1},${y},${z}`), type)) pushQuad(positions, normals, uvs, indices, x, y, z, h, 'right', type);
+         if (isTransparent(loadedBlocks.get(`${x},${y},${z+1}`), type)) pushQuad(positions, normals, uvs, indices, x, y, z, h, 'front', type);
+         if (isTransparent(loadedBlocks.get(`${x},${y},${z-1}`), type)) pushQuad(positions, normals, uvs, indices, x, y, z, h, 'back', type);
       });
   } else {
       const processedCells = new Set<string>();
@@ -45,50 +130,27 @@ self.onmessage = (e) => {
          const cellKey = `${bx},${by},${bz}`;
          
          if (processedCells.has(cellKey)) return;
-         
-         const up = loadedBlocks.has(`${x},${y+1},${z}`);
-         const down = loadedBlocks.has(`${x},${y-1},${z}`);
-         const left = loadedBlocks.has(`${x-1},${y},${z}`);
-         const right = loadedBlocks.has(`${x+1},${y},${z}`);
-         const front = loadedBlocks.has(`${x},${y},${z+1}`);
-         const back = loadedBlocks.has(`${x},${y},${z-1}`);
-         
-         if (up && down && left && right && front && back) return;
-
          processedCells.add(cellKey);
-         instances.push({ x: bx, y: by, z: bz, type, rx: bx + offset, ry: by + offset, rz: bz + offset, scale: step });
+         
+         const px = bx + offset;
+         const py = by + offset;
+         const pz = bz + offset;
+
+         // Para LOD simplemente chequeamos los bordes amplios del bloque gigante
+         if (isTransparent(loadedBlocks.get(`${x},${y+step},${z}`), type)) pushQuad(positions, normals, uvs, indices, px, py, pz, h, 'top', type);
+         if (isTransparent(loadedBlocks.get(`${x},${y-step},${z}`), type)) pushQuad(positions, normals, uvs, indices, px, py, pz, h, 'bottom', type);
+         if (isTransparent(loadedBlocks.get(`${x-step},${y},${z}`), type)) pushQuad(positions, normals, uvs, indices, px, py, pz, h, 'left', type);
+         if (isTransparent(loadedBlocks.get(`${x+step},${y},${z}`), type)) pushQuad(positions, normals, uvs, indices, px, py, pz, h, 'right', type);
+         if (isTransparent(loadedBlocks.get(`${x},${y},${z+step}`), type)) pushQuad(positions, normals, uvs, indices, px, py, pz, h, 'front', type);
+         if (isTransparent(loadedBlocks.get(`${x},${y},${z-step}`), type)) pushQuad(positions, normals, uvs, indices, px, py, pz, h, 'back', type);
       });
   }
 
-  // 3. Build Transferable Float32Arrays for the GPU limits
-  const matrixArray = new Float32Array(instances.length * 16);
-  const typeArray = new Float32Array(instances.length);
-
-  for (let i = 0; i < instances.length; i++) {
-     const inst = instances[i];
-     typeArray[i] = inst.type;
-     
-     const mOffset = i * 16;
-     matrixArray[mOffset + 0] = inst.scale;
-     matrixArray[mOffset + 1] = 0;
-     matrixArray[mOffset + 2] = 0;
-     matrixArray[mOffset + 3] = 0;
-
-     matrixArray[mOffset + 4] = 0;
-     matrixArray[mOffset + 5] = inst.scale;
-     matrixArray[mOffset + 6] = 0;
-     matrixArray[mOffset + 7] = 0;
-
-     matrixArray[mOffset + 8] = 0;
-     matrixArray[mOffset + 9] = 0;
-     matrixArray[mOffset + 10] = inst.scale;
-     matrixArray[mOffset + 11] = 0;
-
-     matrixArray[mOffset + 12] = inst.rx;
-     matrixArray[mOffset + 13] = inst.ry;
-     matrixArray[mOffset + 14] = inst.rz;
-     matrixArray[mOffset + 15] = 1;
-  }
+  // 3. Compact Arrays for Zero-Copy Transfer
+  const posArray = new Float32Array(positions);
+  const normArray = new Float32Array(normals);
+  const uvArray = new Float32Array(uvs);
+  const indArray = new Uint32Array(indices);
 
   const exportedBlocks: [string, number][] = [];
   generatedKeys.forEach(k => {
@@ -98,10 +160,8 @@ self.onmessage = (e) => {
   const response = {
      cx, cz, lodLevel,
      generatedKeys,
-     instancesCount: instances.length,
      exportedBlocks
   };
   
-  // Zero-copy transfer to main thread
-  self.postMessage({ response, matrixArray, typeArray }, { transfer: [matrixArray.buffer, typeArray.buffer] });
+  self.postMessage({ response, posArray, normArray, uvArray, indArray }, { transfer: [posArray.buffer, normArray.buffer, uvArray.buffer, indArray.buffer] });
 };
