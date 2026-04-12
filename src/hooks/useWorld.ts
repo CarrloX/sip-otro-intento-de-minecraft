@@ -40,8 +40,13 @@ export const useWorld = (
     const keys = chunkBlocksRef.current.get(chunkId);
     if (!keys) return;
 
-    const instancesPerType: Record<number, THREE.Matrix4[]> = {};
-    for (let i = 1; i <= 5; i++) instancesPerType[i] = [];
+    const [cx, cz] = chunkId.split(',').map(Number);
+    const chunkCenterX = cx * CHUNK_SIZE + (CHUNK_SIZE / 2);
+    const chunkCenterZ = cz * CHUNK_SIZE + (CHUNK_SIZE / 2);
+    // Bounding sphere estática para Frustum Culling (abarca el sector completo 16x256x16)
+    const chunkBoundingSphere = new THREE.Sphere(new THREE.Vector3(chunkCenterX, 128, chunkCenterZ), 140);
+
+    const validInstances: { matrix: THREE.Matrix4, type: number }[] = [];
 
     const step = lodLevel === 0 ? 1 : lodLevel === 1 ? 2 : 4;
     const offset = lodLevel === 0 ? 0 : lodLevel === 1 ? 0.5 : 1.5;
@@ -66,7 +71,7 @@ export const useWorld = (
 
         const matrix = new THREE.Matrix4();
         matrix.setPosition(x, y, z);
-        instancesPerType[type].push(matrix);
+        validInstances.push({ matrix, type });
       });
     } else {
       // LOD > 0: Downsample by clustering into large cubes (e.g. 2x2x2 or 4x4x4)
@@ -101,23 +106,41 @@ export const useWorld = (
         const matrix = new THREE.Matrix4();
         matrix.makeScale(step, step, step);
         matrix.setPosition(bx + offset, by + offset, bz + offset);
-        instancesPerType[type].push(matrix);
+        validInstances.push({ matrix, type });
       });
     }
 
     const chunkGroup = new THREE.Group();
     chunkGroup.userData = { chunkId };
 
-    Object.entries(instancesPerType).forEach(([typeStr, matrices]) => {
-        const type = Number(typeStr);
-        if (matrices.length === 0) return;
+    if (validInstances.length > 0) {
+      // Unified Material (Texture Atlas) logica:
+      // Ahora usamos el material [1] que engloba al Atlas entero GLSL
+      const unifiedMaterial = materialsRef.current?.[1];
 
-        const material = materialsRef.current[type];
-        if (!material) return;
-
-        const instancedMesh = new THREE.InstancedMesh(blockGeometryRef.current, material, matrices.length);
+      if (unifiedMaterial) {
+        // Redujimos los multiples calls: Creamos un ÚNICO InstancedMesh por chunk
+        const instancedMesh = new THREE.InstancedMesh(
+           blockGeometryRef.current.clone(), // Clone geo requires correct boundingSphere per piece + Custom Buffer
+           unifiedMaterial, 
+           validInstances.length
+        );
         
-        // LOD > 0 saves drawing shadows
+        const typeArray = new Float32Array(validInstances.length);
+
+        for (let i = 0; i < validInstances.length; i++) {
+          instancedMesh.setMatrixAt(i, validInstances[i].matrix);
+          typeArray[i] = validInstances[i].type; // Añadir identificador al array flotante
+        }
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        
+        // Inyectamos nuestro BufferAttribute personalizado que el GLSL Shader leerá
+        const blockTypeAttribute = new THREE.InstancedBufferAttribute(typeArray, 1);
+        instancedMesh.geometry.setAttribute('aBlockType', blockTypeAttribute);
+
+        // Habilita Frustum Culling masivo
+        instancedMesh.boundingSphere = chunkBoundingSphere;
+
         if (lodLevel === 0) {
           instancedMesh.castShadow = true;
           instancedMesh.receiveShadow = true;
@@ -125,23 +148,20 @@ export const useWorld = (
           instancedMesh.castShadow = false;
           instancedMesh.receiveShadow = false;
         }
-        
-        for (let i = 0; i < matrices.length; i++) {
-          instancedMesh.setMatrixAt(i, matrices[i]);
-        }
-        instancedMesh.instanceMatrix.needsUpdate = true;
-        
-        if (lodLevel === 0) {
-          instancedMesh.computeBoundingSphere(); // Fixes invisibility and unclickable blocks
-        }
-        
+
         chunkGroup.add(instancedMesh);
-    });
+      }
+    }
 
     const oldGroup = chunkMeshesRef.current.get(chunkId);
     if (oldGroup) {
       sceneRef.current?.remove(oldGroup);
-      // For strict memory mgmt, we should dispose old meshes, but simplified for MVP.
+      // Evitar Memory Leak destruyendo el Bufffer Geometry modificado de la GPU
+      oldGroup.children.forEach(child => {
+        if (child instanceof THREE.InstancedMesh) {
+           child.geometry.dispose();
+        }
+      });
     }
 
     chunkMeshesRef.current.set(chunkId, chunkGroup);
@@ -208,6 +228,13 @@ export const useWorld = (
     if (group) {
       sceneRef.current?.remove(group);
       chunkMeshesRef.current.delete(chunkId);
+      
+      // Strict memory management: Dispose custom generated geometry!
+      group.children.forEach(child => {
+        if (child instanceof THREE.InstancedMesh) {
+           child.geometry.dispose();
+        }
+      });
     }
 
     // 2. Clear from Mathematical Grid
