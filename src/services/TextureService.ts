@@ -53,6 +53,7 @@ export const createUnifiedMaterial = () => {
   // Al usar Geometria Voxel pura con UVs explícitas, ya no necesitamos hackear shaders de GPU
   const material = new THREE.MeshLambertMaterial({ 
      map: atlasTexture,
+     vertexColors: true, // Enable per-vertex tinting for light levels
   });
 
   return material;

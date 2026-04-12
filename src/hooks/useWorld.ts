@@ -28,11 +28,11 @@ export const useWorld = (
       for (let i = 0; i < 4; i++) {
         const worker = new ChunkWorker();
         worker.onmessage = (e) => {
-           const { response, posArray, normArray, uvArray, indArray } = e.data;
+           const { response, posArray, normArray, uvArray, indArray, colorArray } = e.data;
            const chunkId = `${response.cx},${response.cz}`;
            const callback = workerCallbacksRef.current.get(chunkId);
            if (callback) {
-               callback({ response, posArray, normArray, uvArray, indArray });
+               callback({ response, posArray, normArray, uvArray, indArray, colorArray });
                workerCallbacksRef.current.delete(chunkId);
            }
         };
@@ -73,7 +73,7 @@ export const useWorld = (
          }
      });
 
-     workerCallbacksRef.current.set(chunkId, ({ response, posArray, normArray, uvArray, indArray }) => {
+     workerCallbacksRef.current.set(chunkId, ({ response, posArray, normArray, uvArray, indArray, colorArray }) => {
          // Protección crítica: Si el jugador se movió o rotó rápidamente mientras el chunk se procesaba en el worker
          // y este chunk resultante ya no se necesita, descartamos la geometría para evitar un Memory Leak inborrable
          if (targetChunksRef.current.get(chunkId) !== response.lodLevel) return;
@@ -99,6 +99,7 @@ export const useWorld = (
          geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
          geometry.setAttribute('normal', new THREE.BufferAttribute(normArray, 3));
          geometry.setAttribute('uv', new THREE.BufferAttribute(uvArray, 2));
+         geometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
          geometry.setIndex(new THREE.BufferAttribute(indArray, 1));
          
          const chunkCenterX = response.cx * CHUNK_SIZE + (CHUNK_SIZE / 2);
