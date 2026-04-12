@@ -1,4 +1,4 @@
-import { generateChunk } from '../services/WorldService';
+import { CHUNK_SIZE, generateChunk } from '../services/WorldService';
 
 // Atlas UV mappings
 const ATLAS_COLS = 6;

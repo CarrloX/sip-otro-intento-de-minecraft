@@ -6,6 +6,7 @@ import ChunkWorker from '../workers/ChunkWorker?worker';
 export const useWorld = (
   sceneRef: React.RefObject<THREE.Scene | null>,
   materialsRef: React.RefObject<Record<number, THREE.Material | THREE.Material[]>>,
+  blockGeometryRef: React.RefObject<THREE.BoxGeometry>, // Legacy, mantenido por firma
   renderDistanceRef: React.RefObject<number>
 ) => {
   const objectsRef = useRef<THREE.Object3D[]>([]); 
