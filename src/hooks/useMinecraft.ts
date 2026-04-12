@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { createMaterials } from '../services/TextureService';
-import { setupLighting, updateFog } from '../services/LightingService';
+import { setupLighting, updateFog, updateLighting } from '../services/LightingService';
 import { createHighlighter, updateSelection } from '../services/SelectionService';
 import type { SelectionResult } from '../services/SelectionService';
 import { usePlayer } from './usePlayer';
@@ -85,8 +85,10 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
 
     // 1. Init Scene & Lighting
     const scene = new THREE.Scene();
-    setupLighting(scene, renderDistanceRef.current);
+    const lightingSystem = setupLighting(scene, renderDistanceRef.current);
     sceneRef.current = scene;
+    let worldTime = Math.PI / 4; // Start at Morning (+0.78 rad)
+    const TIME_SPEED = 0.005; // Velocidad del ciclo de día (aprox. 20 min por ciclo)
 
     // 2. Init Camera
     const initialFar = Math.max(100, renderDistanceRef.current * 16 * 2);
@@ -156,6 +158,10 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
         // Delegate updates to specialized hooks
         player.update(delta, camera, controls);
         world.manageChunks(camera.position);
+        
+        worldTime += delta * TIME_SPEED;
+        updateLighting(scene, lightingSystem, worldTime, camera.position, renderDistanceRef.current);
+
         hoveredBlockRef.current = updateSelection(
           camera,
           world.loadedBlocksRef.current,
