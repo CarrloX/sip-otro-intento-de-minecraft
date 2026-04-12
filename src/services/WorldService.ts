@@ -24,10 +24,11 @@ const generateBlockColumn = (
   worldData: Map<string, number>,
   generatedKeys: string[]
 ) => {
-  for (let y = surfaceY; y >= surfaceY - 4; y--) {
+  const depth = 64; // Minecraft-like depth
+  for (let y = surfaceY; y >= surfaceY - depth; y--) {
     const key = `${x},${y},${z}`;
     
-    // Check for user modifications (Option B)
+    // Check for user modifications
     const modType = worldData.get(key);
     if (modType !== undefined) {
       if (modType !== 0) {
