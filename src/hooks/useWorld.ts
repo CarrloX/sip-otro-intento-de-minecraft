@@ -1,6 +1,7 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
-import { CHUNK_SIZE, generateChunk } from '../services/WorldService';
+import { CHUNK_SIZE } from '../services/WorldService';
+import ChunkWorker from '../workers/ChunkWorker?worker';
 
 export const useWorld = (
   sceneRef: React.RefObject<THREE.Scene | null>,
@@ -8,25 +9,51 @@ export const useWorld = (
   blockGeometryRef: React.RefObject<THREE.BoxGeometry>,
   renderDistanceRef: React.RefObject<number>
 ) => {
-  // World State (Option 3: Data Grid + InstancedMesh)
-  const objectsRef = useRef<THREE.Object3D[]>([]); // For Raycasting
+  const objectsRef = useRef<THREE.Object3D[]>([]); 
   
-  // Mathematical Grid & Persistence
-  const loadedBlocksRef = useRef<Map<string, number>>(new Map()); // Global grid: x,y,z -> type
-  const chunkBlocksRef = useRef<Map<string, Set<string>>>(new Map()); // chunkId -> Set of x,y,z keys
-  const worldDataRef = useRef<Map<string, number>>(new Map()); // 0 = air, 1-5 = blocks
+  const loadedBlocksRef = useRef<Map<string, number>>(new Map()); 
+  const chunkBlocksRef = useRef<Map<string, Set<string>>>(new Map()); 
+  const worldDataRef = useRef<Map<string, number>>(new Map()); 
   
-  // Visuals
-  const loadedChunksRef = useRef<Map<string, number>>(new Map()); // chunkId -> lodLevel
+  const loadedChunksRef = useRef<Map<string, number>>(new Map()); 
   const chunkMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
   const playerChunkRef = useRef({ x: Infinity, z: Infinity });
-  const targetChunksRef = useRef<Map<string, number>>(new Map()); // chunkId -> desired lodLevel
+  const targetChunksRef = useRef<Map<string, number>>(new Map());
 
-  // Update the raycaster target array
+  // Web Workers Pool (Multithreading Setup)
+  const workersRef = useRef<Worker[]>([]);
+  const workerCallbacksRef = useRef<Map<string, (data: any) => void>>(new Map());
+
+  useEffect(() => {
+    if (workersRef.current.length === 0) {
+      for (let i = 0; i < 4; i++) { // Spawn 4 concurrent math slaves
+        const worker = new ChunkWorker();
+        worker.onmessage = (e) => {
+           const { response, matrixArray, typeArray } = e.data;
+           const chunkId = `${response.cx},${response.cz}`;
+           const callback = workerCallbacksRef.current.get(chunkId);
+           if (callback) {
+               callback({ response, matrixArray, typeArray });
+               workerCallbacksRef.current.delete(chunkId);
+           }
+        };
+        workersRef.current.push(worker);
+      }
+    }
+  }, []);
+
+  const getAvailableWorker = () => {
+    // Round-robin distribution
+    if (workersRef.current.length === 0) return null; // Fallback
+    const worker = workersRef.current.shift()!;
+    workersRef.current.push(worker);
+    return worker;
+  };
+
   const updateRaycastObjects = useCallback(() => {
     const meshes: THREE.Object3D[] = [];
     chunkMeshesRef.current.forEach((group, chunkId) => {
-      // Solo raycast en LOD 0 (alta resolución y cercano)
+      // Raycast only inside highest resolution 
       if (loadedChunksRef.current.get(chunkId) === 0) {
         meshes.push(...group.children);
       }
@@ -36,138 +63,86 @@ export const useWorld = (
 
   const lastRenderDistanceRef = useRef(renderDistanceRef.current);
 
-  const buildChunkMesh = useCallback((chunkId: string, lodLevel: number = 0) => {
-    const keys = chunkBlocksRef.current.get(chunkId);
-    if (!keys) return;
+  const requestChunkMesh = useCallback((cx: number, cz: number, lodLevel: number = 0) => {
+     const chunkId = `${cx},${cz}`;
+     
+     // Recolectar modificaciones de usuario en este chunk y vecinos para inyeccion asincrona
+     const userModsArray: [string, number][] = [];
+     worldDataRef.current.forEach((val, key) => {
+         const [kx, , kz] = key.split(',').map(Number);
+         const mcx = Math.floor(kx / CHUNK_SIZE);
+         const mcz = Math.floor(kz / CHUNK_SIZE);
+         if (mcx >= cx - 1 && mcx <= cx + 1 && mcz >= cz - 1 && mcz <= cz + 1) {
+            userModsArray.push([key, val]);
+         }
+     });
 
-    const [cx, cz] = chunkId.split(',').map(Number);
-    const chunkCenterX = cx * CHUNK_SIZE + (CHUNK_SIZE / 2);
-    const chunkCenterZ = cz * CHUNK_SIZE + (CHUNK_SIZE / 2);
-    // Bounding sphere estática para Frustum Culling (abarca el sector completo 16x256x16)
-    const chunkBoundingSphere = new THREE.Sphere(new THREE.Vector3(chunkCenterX, 128, chunkCenterZ), 140);
+     // Conectar Callback al trabajador 
+     workerCallbacksRef.current.set(chunkId, ({ response, matrixArray, typeArray }) => {
+         // 1. Sincronizar matemáticas (Grid del jugador local)
+         if (!chunkBlocksRef.current.has(chunkId)) {
+             chunkBlocksRef.current.set(chunkId, new Set(response.generatedKeys));
+         }
+         response.exportedBlocks.forEach(([key, type]: [string, number]) => {
+             if (!worldDataRef.current.has(key)) {
+                loadedBlocksRef.current.set(key, type);
+             }
+         });
 
-    const validInstances: { matrix: THREE.Matrix4, type: number }[] = [];
+         // 2. Construir la gráfica de WebGL directamente enviando los Float Arrays
+         const unifiedMaterial = materialsRef.current?.[1];
+         if (!unifiedMaterial || response.instancesCount === 0) return; // Skip vacios
 
-    const step = lodLevel === 0 ? 1 : lodLevel === 1 ? 2 : 4;
-    const offset = lodLevel === 0 ? 0 : lodLevel === 1 ? 0.5 : 1.5;
+         const chunkGroup = new THREE.Group();
+         chunkGroup.userData = { chunkId };
 
-    if (lodLevel === 0) {
-      // LOD 0: Standard 1:1 Rendering with strict face culling
-      keys.forEach(key => {
-        const type = loadedBlocksRef.current.get(key);
-        if (!type) return;
+         const chunkCenterX = response.cx * CHUNK_SIZE + (CHUNK_SIZE / 2);
+         const chunkCenterZ = response.cz * CHUNK_SIZE + (CHUNK_SIZE / 2);
+         const chunkBoundingSphere = new THREE.Sphere(new THREE.Vector3(chunkCenterX, 128, chunkCenterZ), 140);
 
-        const [x, y, z] = key.split(',').map(Number);
-        
-        const up = loadedBlocksRef.current.has(`${x},${y+1},${z}`);
-        const down = loadedBlocksRef.current.has(`${x},${y-1},${z}`);
-        const left = loadedBlocksRef.current.has(`${x-1},${y},${z}`);
-        const right = loadedBlocksRef.current.has(`${x+1},${y},${z}`);
-        const front = loadedBlocksRef.current.has(`${x},${y},${z+1}`);
-        const back = loadedBlocksRef.current.has(`${x},${y},${z-1}`);
+         const instancedMesh = new THREE.InstancedMesh(
+             blockGeometryRef.current.clone(),
+             unifiedMaterial,
+             response.instancesCount
+         );
 
-        // If fully surrounded, don't draw it (saves massive performance)
-        if (up && down && left && right && front && back) return;
+         // Zero-copy set. Instantáneo en Main Thread.
+         instancedMesh.instanceMatrix.array.set(matrixArray);
+         instancedMesh.instanceMatrix.needsUpdate = true;
+         
+         const blockTypeAttribute = new THREE.InstancedBufferAttribute(typeArray, 1);
+         instancedMesh.geometry.setAttribute('aBlockType', blockTypeAttribute);
+         instancedMesh.boundingSphere = chunkBoundingSphere;
 
-        const matrix = new THREE.Matrix4();
-        matrix.setPosition(x, y, z);
-        validInstances.push({ matrix, type });
-      });
-    } else {
-      // LOD > 0: Downsample by clustering into large cubes (e.g. 2x2x2 or 4x4x4)
-      const processedCells = new Set<string>();
-      
-      keys.forEach(key => {
-        const type = loadedBlocksRef.current.get(key);
-        if (!type) return;
+         if (response.lodLevel === 0) {
+            instancedMesh.castShadow = true;
+            instancedMesh.receiveShadow = true;
+         } else {
+            instancedMesh.castShadow = false;
+            instancedMesh.receiveShadow = false;
+         }
 
-        const [x, y, z] = key.split(',').map(Number);
-        
-        // Find base coordinates of the larger cube inside the virtual 3D grid
-        const bx = Math.floor(x / step) * step;
-        const by = Math.floor(y / step) * step;
-        const bz = Math.floor(z / step) * step;
-        const cellKey = `${bx},${by},${bz}`;
-        
-        if (processedCells.has(cellKey)) return;
-        
-        // Minor optimization: rough culling to skip completely buried clusters
-        const up = loadedBlocksRef.current.has(`${x},${y+1},${z}`);
-        const down = loadedBlocksRef.current.has(`${x},${y-1},${z}`);
-        const left = loadedBlocksRef.current.has(`${x-1},${y},${z}`);
-        const right = loadedBlocksRef.current.has(`${x+1},${y},${z}`);
-        const front = loadedBlocksRef.current.has(`${x},${y},${z+1}`);
-        const back = loadedBlocksRef.current.has(`${x},${y},${z-1}`);
-        
-        if (up && down && left && right && front && back) return;
-        
-        processedCells.add(cellKey);
-        
-        const matrix = new THREE.Matrix4();
-        matrix.makeScale(step, step, step);
-        matrix.setPosition(bx + offset, by + offset, bz + offset);
-        validInstances.push({ matrix, type });
-      });
-    }
+         chunkGroup.add(instancedMesh);
 
-    const chunkGroup = new THREE.Group();
-    chunkGroup.userData = { chunkId };
+         const oldGroup = chunkMeshesRef.current.get(chunkId);
+         if (oldGroup) {
+            sceneRef.current?.remove(oldGroup);
+            oldGroup.children.forEach(child => {
+               if (child instanceof THREE.InstancedMesh) child.geometry.dispose();
+            });
+         }
 
-    if (validInstances.length > 0) {
-      // Unified Material (Texture Atlas) logica:
-      // Ahora usamos el material [1] que engloba al Atlas entero GLSL
-      const unifiedMaterial = materialsRef.current?.[1];
+         chunkMeshesRef.current.set(chunkId, chunkGroup);
+         sceneRef.current?.add(chunkGroup);
+         updateRaycastObjects();
+     });
 
-      if (unifiedMaterial) {
-        // Redujimos los multiples calls: Creamos un ÚNICO InstancedMesh por chunk
-        const instancedMesh = new THREE.InstancedMesh(
-           blockGeometryRef.current.clone(), // Clone geo requires correct boundingSphere per piece + Custom Buffer
-           unifiedMaterial, 
-           validInstances.length
-        );
-        
-        const typeArray = new Float32Array(validInstances.length);
-
-        for (let i = 0; i < validInstances.length; i++) {
-          instancedMesh.setMatrixAt(i, validInstances[i].matrix);
-          typeArray[i] = validInstances[i].type; // Añadir identificador al array flotante
-        }
-        instancedMesh.instanceMatrix.needsUpdate = true;
-        
-        // Inyectamos nuestro BufferAttribute personalizado que el GLSL Shader leerá
-        const blockTypeAttribute = new THREE.InstancedBufferAttribute(typeArray, 1);
-        instancedMesh.geometry.setAttribute('aBlockType', blockTypeAttribute);
-
-        // Habilita Frustum Culling masivo
-        instancedMesh.boundingSphere = chunkBoundingSphere;
-
-        if (lodLevel === 0) {
-          instancedMesh.castShadow = true;
-          instancedMesh.receiveShadow = true;
-        } else {
-          instancedMesh.castShadow = false;
-          instancedMesh.receiveShadow = false;
-        }
-
-        chunkGroup.add(instancedMesh);
-      }
-    }
-
-    const oldGroup = chunkMeshesRef.current.get(chunkId);
-    if (oldGroup) {
-      sceneRef.current?.remove(oldGroup);
-      // Evitar Memory Leak destruyendo el Bufffer Geometry modificado de la GPU
-      oldGroup.children.forEach(child => {
-        if (child instanceof THREE.InstancedMesh) {
-           child.geometry.dispose();
-        }
-      });
-    }
-
-    chunkMeshesRef.current.set(chunkId, chunkGroup);
-    sceneRef.current?.add(chunkGroup);
-    updateRaycastObjects();
+     const worker = getAvailableWorker();
+     if (worker) {
+         worker.postMessage({ cx, cz, lodLevel, userModsArray });
+     }
   }, [materialsRef, blockGeometryRef, sceneRef, updateRaycastObjects]);
+
 
   const addBlock = useCallback((x: number, y: number, z: number, type: number) => {
     const rx = Math.round(x);
@@ -176,8 +151,8 @@ export const useWorld = (
     const key = `${rx},${ry},${rz}`;
     const chunkId = `${Math.floor(rx / CHUNK_SIZE)},${Math.floor(rz / CHUNK_SIZE)}`;
 
-    worldDataRef.current.set(key, type); // Persist
-    loadedBlocksRef.current.set(key, type); // Update mathematical grid
+    worldDataRef.current.set(key, type); // For Worker memory persistence
+    loadedBlocksRef.current.set(key, type); // Instant physics collision
 
     let chunkSet = chunkBlocksRef.current.get(chunkId);
     if (!chunkSet) {
@@ -186,8 +161,9 @@ export const useWorld = (
     }
     chunkSet.add(key);
 
-    buildChunkMesh(chunkId, loadedChunksRef.current.get(chunkId) || 0);
-  }, [buildChunkMesh]);
+    // Call off-thread rebuilt
+    requestChunkMesh(Math.floor(rx / CHUNK_SIZE), Math.floor(rz / CHUNK_SIZE), loadedChunksRef.current.get(chunkId) || 0);
+  }, [requestChunkMesh]);
 
   const removeBlock = useCallback((x: number, y: number, z: number) => {
     const rx = Math.round(x);
@@ -196,28 +172,12 @@ export const useWorld = (
     const key = `${rx},${ry},${rz}`;
     const chunkId = `${Math.floor(rx / CHUNK_SIZE)},${Math.floor(rz / CHUNK_SIZE)}`;
 
-    worldDataRef.current.set(key, 0); // Persist as air
+    worldDataRef.current.set(key, 0); 
     loadedBlocksRef.current.delete(key);
     chunkBlocksRef.current.get(chunkId)?.delete(key);
 
-    buildChunkMesh(chunkId, loadedChunksRef.current.get(chunkId) || 0);
-  }, [buildChunkMesh]);
-
-  const loadChunk = useCallback((cx: number, cz: number, initialLod: number = 0) => {
-    const chunkId = `${cx},${cz}`;
-    if (loadedChunksRef.current.has(chunkId)) return;
-    
-    // Generate data
-    const generatedKeys = generateChunk(cx, cz, loadedBlocksRef.current, worldDataRef.current);
-    
-    // Associate new blocks with this chunk exactly as they were generated, 
-    // even if they spill over the mathematical boundary (like tree leaves)
-    chunkBlocksRef.current.set(chunkId, new Set(generatedKeys));
-    loadedChunksRef.current.set(chunkId, initialLod);
-
-    // Build Graphics
-    buildChunkMesh(chunkId, initialLod);
-  }, [buildChunkMesh]);
+    requestChunkMesh(Math.floor(rx / CHUNK_SIZE), Math.floor(rz / CHUNK_SIZE), loadedChunksRef.current.get(chunkId) || 0);
+  }, [requestChunkMesh]);
 
   const unloadChunk = useCallback((cx: number, cz: number) => {
     const chunkId = `${cx},${cz}`;
@@ -229,11 +189,9 @@ export const useWorld = (
       sceneRef.current?.remove(group);
       chunkMeshesRef.current.delete(chunkId);
       
-      // Strict memory management: Dispose custom generated geometry!
+      // Strict memory management
       group.children.forEach(child => {
-        if (child instanceof THREE.InstancedMesh) {
-           child.geometry.dispose();
-        }
+        if (child instanceof THREE.InstancedMesh) child.geometry.dispose();
       });
     }
 
@@ -253,37 +211,29 @@ export const useWorld = (
     const px = Math.floor(cameraPosition.x / CHUNK_SIZE);
     const pz = Math.floor(cameraPosition.z / CHUNK_SIZE);
 
-    // 1. Target Phase: If player moved chunk boundary, rebuild target state
     if (px !== playerChunkRef.current.x || pz !== playerChunkRef.current.z || loadedChunksRef.current.size === 0 || lastRenderDistanceRef.current !== RENDER_DISTANCE) {
       playerChunkRef.current = { x: px, z: pz };
       lastRenderDistanceRef.current = RENDER_DISTANCE;
       const newTargetChunks = new Map<string, number>();
 
-      for(let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++){
-        for(let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++){
+      for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++){
+        for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++){
           const cx = px + dx;
           const cz = pz + dz;
           
-          // Nivel de LOD basado estrictamente en el grid de la posición del jugador
           const distance = Math.max(Math.abs(dx), Math.abs(dz));
           let lodLevel = 0;
-          if (distance > 10) {
-             lodLevel = 2; // 11+ chunks away
-          } else if (distance > 4) {
-             lodLevel = 1; // 5-10 chunks away
-          }
-
-          const chunkId = `${cx},${cz}`;
-          newTargetChunks.set(chunkId, lodLevel);
+          if (distance > 10) lodLevel = 2; // 11+
+          else if (distance > 4) lodLevel = 1; // 5-10
+          
+          newTargetChunks.set(`${cx},${cz}`, lodLevel);
         }
       }
       targetChunksRef.current = newTargetChunks;
     }
 
-    // 2. Reconcile Phase: Process max 1 heavy chunk operation per frame to completely eliminate stutters
-    let operationsRemaining = 1;
+    let operationsRemaining = 2; // Con workers asíncronos podemos meter más órdenes por frame
 
-    // First priority: Unload out-of-bounds chunks (fast, frees memory for incoming chunks)
     for (const chunkId of loadedChunksRef.current.keys()) {
        if (!targetChunksRef.current.has(chunkId)) {
            const [ccx, ccz] = chunkId.split(',').map(Number);
@@ -293,47 +243,37 @@ export const useWorld = (
        }
     }
 
-    // Second priority: Load or Rebuild LOD 0 chunks (immediate surroundings)
     for (const [chunkId, targetLod] of targetChunksRef.current.entries()) {
-       if (targetLod !== 0) continue; // Skip distant chunks for now
+       if (targetLod !== 0) continue; 
        
        const currentLod = loadedChunksRef.current.get(chunkId);
-       if (currentLod === undefined) {
+       if (currentLod === undefined || currentLod !== targetLod) {
+           loadedChunksRef.current.set(chunkId, targetLod); // Indicate loading intention
            const [ccx, ccz] = chunkId.split(',').map(Number);
-           loadChunk(ccx, ccz, targetLod);
-           operationsRemaining--;
-           if (operationsRemaining <= 0) return;
-       } else if (currentLod !== targetLod) {
-           loadedChunksRef.current.set(chunkId, targetLod);
-           buildChunkMesh(chunkId, targetLod);
+           requestChunkMesh(ccx, ccz, targetLod);
            operationsRemaining--;
            if (operationsRemaining <= 0) return;
        }
     }
 
-    // Third priority: Load or Rebuild distant LOD 1 & 2 chunks
     for (const [chunkId, targetLod] of targetChunksRef.current.entries()) {
-       if (targetLod === 0) continue; // Already handled
+       if (targetLod === 0) continue; 
        
        const currentLod = loadedChunksRef.current.get(chunkId);
-       if (currentLod === undefined) {
-           const [ccx, ccz] = chunkId.split(',').map(Number);
-           loadChunk(ccx, ccz, targetLod);
-           operationsRemaining--;
-           if (operationsRemaining <= 0) return;
-       } else if (currentLod !== targetLod) {
+       if (currentLod === undefined || currentLod !== targetLod) {
            loadedChunksRef.current.set(chunkId, targetLod);
-           buildChunkMesh(chunkId, targetLod);
+           const [ccx, ccz] = chunkId.split(',').map(Number);
+           requestChunkMesh(ccx, ccz, targetLod);
            operationsRemaining--;
            if (operationsRemaining <= 0) return;
        }
     }
 
-  }, [loadChunk, unloadChunk, buildChunkMesh]);
+  }, [requestChunkMesh, unloadChunk]);
 
   return React.useMemo(() => ({
     objectsRef,
-    loadedBlocksRef, // Expose mathematical grid to player physics
+    loadedBlocksRef,
     addBlock,
     removeBlock,
     manageChunks
