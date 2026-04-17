@@ -180,7 +180,15 @@ export const useWorld = (
 
      const worker = getAvailableWorker();
      if (worker) {
-         worker.postMessage({ cx, cz, lodLevel, userModsArray, taskId, fancyLeaves: fancyLeavesRef.current });
+         const lodLeft = targetChunksRef.current.get(`${cx-1},${cz}`) ?? 2;
+         const lodRight = targetChunksRef.current.get(`${cx+1},${cz}`) ?? 2;
+         const lodTop = targetChunksRef.current.get(`${cx},${cz-1}`) ?? 2;
+         const lodBottom = targetChunksRef.current.get(`${cx},${cz+1}`) ?? 2;
+
+         worker.postMessage({ 
+            cx, cz, lodLevel, userModsArray, taskId, fancyLeaves: fancyLeavesRef.current,
+            neighborLODs: { lodLeft, lodRight, lodTop, lodBottom }
+         });
      }
   }, [materialsRef, sceneRef, updateRaycastObjects]);
 
@@ -336,12 +344,12 @@ export const useWorld = (
           const cz = pz + dz;
           const distance = Math.max(Math.abs(dx), Math.abs(dz));
           
-          let lodLevel = distance > 10 ? 2 : (distance > 4 ? 1 : 0);
+          let lodLevel = distance > 16 ? 2 : (distance > 8 ? 1 : 0);
           
           const currentLod = loadedChunksRef.current.get(`${cx},${cz}`);
           if (currentLod !== undefined) {
-              if (currentLod === 0 && distance === 5) lodLevel = 0;
-              if (currentLod === 1 && distance === 11) lodLevel = 1;
+              if (currentLod === 0 && distance === 9) lodLevel = 0;
+              if (currentLod === 1 && distance === 17) lodLevel = 1;
           }
 
           newTargetChunks.set(`${cx},${cz}`, lodLevel);

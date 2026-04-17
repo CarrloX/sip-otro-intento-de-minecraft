@@ -9,7 +9,7 @@ import { usePlayer } from './usePlayer';
 import { useInteraction } from './useInteraction';
 import { useWorld } from './useWorld';
 
-export const useMinecraft = (currentBlockType: number, targetFps: number = 144, renderDistance: number = 2, autoJump: boolean = true, fancyLeaves: boolean = true) => {
+export const useMinecraft = (currentBlockType: number, targetFps: number = 144, renderDistance: number = 2, autoJump: boolean = true, fancyLeaves: boolean = true, showClouds: boolean = true) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
@@ -35,7 +35,8 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
     }
     if (cameraRef.current) {
       const CHUNK_SIZE = 16;
-      cameraRef.current.far = Math.max(100, renderDistance * CHUNK_SIZE * 2);
+      // Force Far Plane to at least 32 chunks (512 units) to guarantee cloud visibility
+      cameraRef.current.far = Math.max(512, renderDistance * CHUNK_SIZE * 2);
       cameraRef.current.updateProjectionMatrix();
     }
   }, [renderDistance]);
@@ -46,6 +47,7 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<PointerLockControls | null>(null);
   const hoveredBlockRef = useRef<SelectionResult | null>(null);
+  const lightingSystemRef = useRef<any>(null);
   
   // Shared Configuration
   const materialsRef = useRef<Record<number, THREE.Material | THREE.Material[]>>({});
@@ -56,6 +58,12 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
   // Initialize World Hook (Manages Chunks and Blocks)
   const fancyLeavesRef = useRef(fancyLeaves);
   useEffect(() => { fancyLeavesRef.current = fancyLeaves; }, [fancyLeaves]);
+
+  useEffect(() => {
+    if (lightingSystemRef.current) {
+      lightingSystemRef.current.cloudGroup.visible = showClouds;
+    }
+  }, [showClouds]);
   
   const world = useWorld(sceneRef, materialsRef, blockGeometryRef, renderDistanceRef, fancyLeavesRef);
 
@@ -88,12 +96,14 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
     // 1. Init Scene & Lighting
     const scene = new THREE.Scene();
     const lightingSystem = setupLighting(scene, renderDistanceRef.current);
+    lightingSystem.cloudGroup.visible = showClouds;
+    lightingSystemRef.current = lightingSystem;
     sceneRef.current = scene;
     let worldTime = Math.PI / 4; // Start at Morning (+0.78 rad)
     const TIME_SPEED = 0.005; // Velocidad del ciclo de día (aprox. 20 min por ciclo)
 
     // 2. Init Camera
-    const initialFar = Math.max(100, renderDistanceRef.current * 16 * 2);
+    const initialFar = Math.max(512, renderDistanceRef.current * 16 * 2);
     const camera = new THREE.PerspectiveCamera(75, globalThis.innerWidth / globalThis.innerHeight, 0.1, initialFar);
     camera.position.y = 30;
     cameraRef.current = camera;

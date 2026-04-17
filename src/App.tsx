@@ -12,6 +12,7 @@ function App() {
   const [renderDistance, setRenderDistance] = useState(2);
   const [autoJump, setAutoJump] = useState(true);
   const [fancyLeaves, setFancyLeaves] = useState(true);
+  const [showClouds, setShowClouds] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(true); // Start with menu open
   const [lockControls, setLockControls] = useState<() => void>(() => () => {});
 
@@ -59,6 +60,7 @@ function App() {
         renderDistance={renderDistance}
         autoJump={autoJump}
         fancyLeaves={fancyLeaves}
+        showClouds={showClouds}
         onStatusChange={handleStatusChange} 
       />
 
@@ -75,6 +77,8 @@ function App() {
         onAutoJumpChange={setAutoJump}
         fancyLeaves={fancyLeaves}
         onFancyLeavesChange={setFancyLeaves}
+        showClouds={showClouds}
+        onShowCloudsChange={setShowClouds}
         onMenuToggle={toggleMenu}
       />
     </div>

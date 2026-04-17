@@ -30,7 +30,8 @@ const getPaddedIndex = (lx: number, y: number, lz: number) => {
 };
 
 self.onmessage = (e) => {
-  const { cx, cz, lodLevel, userModsArray, taskId, fancyLeaves } = e.data;
+  const { cx, cz, lodLevel, userModsArray, taskId, fancyLeaves, neighborLODs } = e.data;
+  const { lodLeft, lodRight, lodTop, lodBottom } = neighborLODs || { lodLeft: lodLevel, lodRight: lodLevel, lodTop: lodLevel, lodBottom: lodLevel };
   const worldData = new Map<string, number>(userModsArray);
 
   const startX = cx * CHUNK_SIZE;
@@ -325,7 +326,13 @@ self.onmessage = (e) => {
     return hasLeaves ? 5 : 0;
   };
 
-  const shouldRenderFace = (myType: number, neighborType: number) => {
+  const shouldRenderFace = (myType: number, neighborType: number, dir: string, lx: number, lz: number) => {
+      // LOD Skirts: Force draw boundary faces if adjacent chunk is rendering at a different LOD level!
+      if (dir === 'left' && lx === 0 && lodLeft !== lodLevel) return true;
+      if (dir === 'right' && lx === CHUNK_SIZE - 1 && lodRight !== lodLevel) return true;
+      if (dir === 'back' && lz === 0 && lodTop !== lodLevel) return true;
+      if (dir === 'front' && lz === CHUNK_SIZE - 1 && lodBottom !== lodLevel) return true;
+
       const isNeighborTransparent = neighborType === 0 || neighborType === 5;
       if (!isNeighborTransparent) return false;
       // Normal Leaves Culling (do not render faces touching other leaves)
@@ -333,7 +340,12 @@ self.onmessage = (e) => {
       return true;
   };
 
-  const shouldRenderFaceLOD = (myType: number, neighborType: number) => {
+  const shouldRenderFaceLOD = (myType: number, neighborType: number, dir: string, lx: number, lz: number) => {
+     if (dir === 'left' && lx === 0 && lodLeft !== lodLevel) return true;
+     if (dir === 'right' && lx === CHUNK_SIZE - step && lodRight !== lodLevel) return true;
+     if (dir === 'back' && lz === 0 && lodTop !== lodLevel) return true;
+     if (dir === 'front' && lz === CHUNK_SIZE - step && lodBottom !== lodLevel) return true;
+
      // In distant LOD mode, ALWAYS treat leaves as fast/opaque blocks to save vertices.
      // If neighbor is exact air, definitely draw faces pointing to it so landscape renders.
      if (neighborType === 0) return true;
@@ -355,12 +367,12 @@ self.onmessage = (e) => {
                const gx = cx * CHUNK_SIZE + lx;
                const gz = cz * CHUNK_SIZE + lz;
                
-               if (shouldRenderFace(type, getBlock(lx,y+1,lz))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'top');
-               if (shouldRenderFace(type, getBlock(lx,y-1,lz))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'bottom');
-               if (shouldRenderFace(type, getBlock(lx-1,y,lz))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'left');
-               if (shouldRenderFace(type, getBlock(lx+1,y,lz))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'right');
-               if (shouldRenderFace(type, getBlock(lx,y,lz+1))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'front');
-               if (shouldRenderFace(type, getBlock(lx,y,lz-1))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'back');
+               if (shouldRenderFace(type, getBlock(lx,y+1,lz), 'top', lx, lz)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'top');
+               if (shouldRenderFace(type, getBlock(lx,y-1,lz), 'bottom', lx, lz)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'bottom');
+               if (shouldRenderFace(type, getBlock(lx-1,y,lz), 'left', lx, lz)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'left');
+               if (shouldRenderFace(type, getBlock(lx+1,y,lz), 'right', lx, lz)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'right');
+               if (shouldRenderFace(type, getBlock(lx,y,lz+1), 'front', lx, lz)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'front');
+               if (shouldRenderFace(type, getBlock(lx,y,lz-1), 'back', lx, lz)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'back');
             }
          }
       }
@@ -376,12 +388,12 @@ self.onmessage = (e) => {
                const pz = cz * CHUNK_SIZE + lz + offset;
                
                // Volumetric Culling for LODs (Leaves are treated effectively as solid for performance)
-               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y+step, lz, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'top');
-               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y-step, lz, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'bottom');
-               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx-step, y, lz, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'left');
-               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx+step, y, lz, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'right');
-               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y, lz+step, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'front');
-               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y, lz-step, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'back');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y+step, lz, step), 'top', lx, lz)) pushQuadWithAO(lx, py, lz, px, pz, type, 'top');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y-step, lz, step), 'bottom', lx, lz)) pushQuadWithAO(lx, py, lz, px, pz, type, 'bottom');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx-step, y, lz, step), 'left', lx, lz)) pushQuadWithAO(lx, py, lz, px, pz, type, 'left');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx+step, y, lz, step), 'right', lx, lz)) pushQuadWithAO(lx, py, lz, px, pz, type, 'right');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y, lz+step, step), 'front', lx, lz)) pushQuadWithAO(lx, py, lz, px, pz, type, 'front');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y, lz-step, step), 'back', lx, lz)) pushQuadWithAO(lx, py, lz, px, pz, type, 'back');
             }
          }
       }

@@ -11,10 +11,12 @@ interface OptionsMenuProps {
   onAutoJumpChange: (autoJump: boolean) => void;
   fancyLeaves: boolean;
   onFancyLeavesChange: (fancyLeaves: boolean) => void;
+  showClouds: boolean;
+  onShowCloudsChange: (showClouds: boolean) => void;
   onClose: () => void;
 }
 
-const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, onClose }) => {
+const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, onClose }) => {
   if (!isVisible) return null;
 
   return (
@@ -72,6 +74,18 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               className="option-checkbox"
               aria-label="Fancy Leaves"
               title="Activar o desactivar follaje semitransparente"
+              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+            />
+          </div>
+          <div className="option-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
+            <span className="option-label">Show Clouds</span>
+            <input 
+              type="checkbox" 
+              checked={showClouds} 
+              onChange={(e) => onShowCloudsChange(e.target.checked)}
+              className="option-checkbox"
+              aria-label="Show Clouds"
+              title="Activar o desactivar nubes 3D"
               style={{ width: '20px', height: '20px', cursor: 'pointer' }}
             />
           </div>
