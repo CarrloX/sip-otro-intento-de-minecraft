@@ -2,11 +2,12 @@ import { useRef, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { useKeyboard } from './useKeyboard';
+import { getGlobalBlockType } from '../services/WorldService';
 
 const PHYSICS_STEP = 1 / 60;
 const MAX_SUBSTEPS = 5;
 
-export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>, autoJumpEnabledRef: React.RefObject<boolean>) => {
+export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>>, autoJumpEnabledRef: React.RefObject<boolean>) => {
   const { actionsRef } = useKeyboard();
   const velocity = useRef(new THREE.Vector3());
   const direction = useRef(new THREE.Vector3());
@@ -30,15 +31,18 @@ export const usePlayer = (loadedBlocksRef: React.RefObject<Map<string, number>>,
     const minZ = Math.round(pos.z - PLAYER_WIDTH);
     const maxZ = Math.round(pos.z + PLAYER_WIDTH);
 
+    if (!chunksDataRef.current) return false;
+
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         for (let z = minZ; z <= maxZ; z++) {
-          if (loadedBlocksRef.current?.has(`${x},${y},${z}`)) return true;
+          const type = getGlobalBlockType(x, y, z, chunksDataRef.current);
+          if (type !== 0) return true; // Solid (non-air)
         }
       }
     }
     return false;
-  }, [loadedBlocksRef]);
+  }, [chunksDataRef]);
 
   const applyVerticalForces = useCallback((actions: Record<string, boolean>, isSprinting: boolean, isFlying: boolean) => {
     if (isFlying) {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getGlobalBlockType } from './WorldService';
 
 export interface SelectionResult {
   blockPosition: THREE.Vector3;
@@ -23,7 +24,7 @@ export const createHighlighter = () => {
 const performVoxelTraversal = (
   origin: THREE.Vector3,
   direction: THREE.Vector3,
-  blocksMap: Map<string, number>,
+  chunksData: Map<string, Uint8Array>,
   maxDistance: number
 ) => {
   let x = Math.floor(origin.x);
@@ -63,7 +64,8 @@ const performVoxelTraversal = (
       normal.set(0, 0, -stepZ);
     }
 
-    if (blocksMap.has(`${x},${y},${z}`)) {
+    const type = getGlobalBlockType(x, y, z, chunksData);
+    if (type !== 0) { // Solid block
       return { hit: true, blockPosition: new THREE.Vector3(x, y, z), normal, distance };
     }
   }
@@ -73,14 +75,14 @@ const performVoxelTraversal = (
 
 export const updateSelection = (
   camera: THREE.PerspectiveCamera,
-  blocksMap: Map<string, number>,
+  chunksData: Map<string, Uint8Array>,
   highlighter: THREE.LineSegments,
   maxDistance: number = 5
 ): SelectionResult | null => {
   const origin = new THREE.Vector3().copy(camera.position).addScalar(0.5);
   const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
 
-  const result = performVoxelTraversal(origin, direction, blocksMap, maxDistance);
+  const result = performVoxelTraversal(origin, direction, chunksData, maxDistance);
 
   if (result.hit && result.blockPosition && result.normal) {
     highlighter.position.copy(result.blockPosition);

@@ -61,8 +61,7 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
     autoJumpRef.current = autoJump;
   }, [autoJump]);
 
-  // Initialize Custom Hooks with World Data
-  const player = usePlayer(world.loadedBlocksRef, autoJumpRef);
+  const player = usePlayer(world.chunksDataRef, autoJumpRef);
   
   const interaction = useInteraction(
     world.objectsRef,
@@ -199,7 +198,7 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
 
         hoveredBlockRef.current = updateSelection(
           camera,
-          world.loadedBlocksRef.current,
+          world.chunksDataRef.current,
           highlighter
         );
 
@@ -235,7 +234,7 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
       controls.removeEventListener('unlock', onUnlock);
       renderer.dispose();
       renderer.domElement.remove();
-      world.loadedBlocksRef.current.clear();
+      world.chunksDataRef.current.clear();
       world.objectsRef.current = [];
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,4 +1,14 @@
 export const CHUNK_SIZE = 16;
+export const Y_MIN = -64;
+export const Y_MAX = 255;
+export const Y_HEIGHT = Y_MAX - Y_MIN + 1; // 320
+export const CHUNK_VOLUME = CHUNK_SIZE * CHUNK_SIZE * Y_HEIGHT; // 81920
+
+export const getBlockIndex = (lx: number, y: number, lz: number): number => {
+  const indexY = y - Y_MIN;
+  if (indexY < 0 || indexY >= Y_HEIGHT || lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) return -1;
+  return lx + (lz * CHUNK_SIZE) + (indexY * CHUNK_SIZE * CHUNK_SIZE);
+};
 
 const pseudoRandom = (x: number, z: number) => {
   let h = Math.imul(x ^ (z << 16), 0x85ebca6b);
@@ -16,87 +26,66 @@ const getTerrainType = (y: number, surfaceY: number): number => {
   return 3; // Stone
 };
 
-const generateBlockColumn = (
-  x: number,
-  z: number,
-  surfaceY: number,
-  loadedBlocks: Map<string, number>,
-  chunkWorldData: Map<string, number>,
-  generatedKeys: string[]
-) => {
-  const depth = 64; // Minecraft-like depth
-  for (let y = surfaceY; y >= surfaceY - depth; y--) {
-    const key = `${x},${y},${z}`;
-    
-    // Check for user modifications
-    const modType = chunkWorldData.get(key);
-    if (modType !== undefined) {
-      if (modType !== 0) {
-        loadedBlocks.set(key, modType);
-        generatedKeys.push(key);
-      }
-      continue;
-    }
-
-    // Normal Generation
-    const type = getTerrainType(y, surfaceY);
-    loadedBlocks.set(key, type);
-    generatedKeys.push(key);
-  }
-};
-
 export const generateChunk = (
   chunkX: number,
   chunkZ: number,
-  loadedBlocks: Map<string, number>,
   chunkWorldData: Map<string, number>
-): string[] => {
-  const generatedKeys: string[] = [];
+): Uint8Array => {
+  const chunkData = new Uint8Array(CHUNK_VOLUME);
   const startX = chunkX * CHUNK_SIZE;
   const startZ = chunkZ * CHUNK_SIZE;
 
-  for (let x = startX; x < startX + CHUNK_SIZE; x++) {
-    for (let z = startZ; z < startZ + CHUNK_SIZE; z++) {
-      const surfaceY = noise(x, z);
+  // 1. Generate Base Terrain Let's iterate linearly local coords
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const gx = startX + lx;
+      const gz = startZ + lz;
+      const surfaceY = noise(gx, gz);
       
-      generateBlockColumn(x, z, surfaceY, loadedBlocks, chunkWorldData, generatedKeys);
-
-      if (pseudoRandom(x, z) < 0.02) {
-        generateTree(x, surfaceY + 1, z, loadedBlocks, chunkWorldData, generatedKeys);
+      const depth = 64; 
+      for (let y = surfaceY; y >= surfaceY - depth; y--) {
+        const idx = getBlockIndex(lx, y, lz);
+        if (idx !== -1) {
+            chunkData[idx] = getTerrainType(y, surfaceY);
+        }
       }
     }
   }
 
-  // Final Pass: Ensure ALL user modifications in this chunk are captured
+  // 1.5 Generate Trees with Deterministic Procedural Overlapping (fixes cross-chunk bleeding)
+  const TREE_OVERLAP = 2; // Leaves extend up to 2 blocks from trunk
+  for (let lx = -TREE_OVERLAP; lx < CHUNK_SIZE + TREE_OVERLAP; lx++) {
+    for (let lz = -TREE_OVERLAP; lz < CHUNK_SIZE + TREE_OVERLAP; lz++) {
+      const gx = startX + lx;
+      const gz = startZ + lz;
+      
+      if (pseudoRandom(gx, gz) < 0.02) {
+        const surfaceY = noise(gx, gz);
+        generateTree(lx, surfaceY + 1, lz, chunkData);
+      }
+    }
+  }
+
+  // 2. Apply User Modifications
   chunkWorldData.forEach((type, key) => {
-    if (type === 0) {
-      loadedBlocks.delete(key);
-      const index = generatedKeys.indexOf(key);
-      if (index > -1) generatedKeys.splice(index, 1);
-    } else if (!loadedBlocks.has(key)) {
-      loadedBlocks.set(key, type);
-      generatedKeys.push(key);
+    const [gx, gy, gz] = key.split(',').map(Number);
+    // Convert global to local
+    const lx = gx - startX;
+    const lz = gz - startZ;
+    const idx = getBlockIndex(lx, gy, lz);
+    
+    // Only apply if inside THIS chunk's bounds.
+    // (If the mod map contained neighbors for lighting, they are ignored structurally here)
+    if (idx !== -1) {
+      if (type === 0) {
+          chunkData[idx] = 0; // Air / removed block
+      } else {
+          chunkData[idx] = type;
+      }
     }
   });
 
-  return generatedKeys;
-};
-
-const addLeafBlock = (
-  key: string,
-  loadedBlocks: Map<string, number>,
-  chunkWorldData: Map<string, number>,
-  generatedKeys: string[]
-) => {
-  const modType = chunkWorldData.get(key);
-  
-  if (modType === undefined) {
-    loadedBlocks.set(key, 5); // Default leaf
-    generatedKeys.push(key);
-  } else if (modType !== 0) {
-    loadedBlocks.set(key, modType);
-    generatedKeys.push(key);
-  }
+  return chunkData;
 };
 
 const generateLeaves = (
@@ -104,9 +93,7 @@ const generateLeaves = (
   centerY: number,
   centerZ: number,
   height: number,
-  loadedBlocks: Map<string, number>,
-  chunkWorldData: Map<string, number>,
-  generatedKeys: string[]
+  chunkData: Uint8Array
 ) => {
   for (let hx = centerX - 2; hx <= centerX + 2; hx++) {
     for (let hz = centerZ - 2; hz <= centerZ + 2; hz++) {
@@ -115,33 +102,54 @@ const generateLeaves = (
         const isCornerTop = dist === 4 && hy === centerY + height + 1;
         if (isCornerTop) continue;
         
-        addLeafBlock(`${hx},${hy},${hz}`, loadedBlocks, chunkWorldData, generatedKeys);
+        const idx = getBlockIndex(hx, hy, hz);
+        if (idx !== -1) {
+            // Only place if it's air or leaves (don't overwrite wood/stone)
+            if (chunkData[idx] === 0 || chunkData[idx] === 5) {
+                chunkData[idx] = 5; // Leaf
+            }
+        }
       }
     }
   }
 };
 
 export const generateTree = (
-  x: number,
+  lx: number,
   y: number,
-  z: number,
-  loadedBlocks: Map<string, number>,
-  chunkWorldData: Map<string, number>,
-  generatedKeys: string[]
+  lz: number,
+  chunkData: Uint8Array
 ) => {
   const height = 4;
   for (let i = 0; i < height; i++) {
-    const key = `${x},${y + i},${z}`;
-    const modType = chunkWorldData.get(key);
-    
-    if (modType === undefined) {
-       loadedBlocks.set(key, 4); // Default log
-       generatedKeys.push(key);
-    } else if (modType !== 0) {
-      loadedBlocks.set(key, modType);
-      generatedKeys.push(key);
+    const idx = getBlockIndex(lx, y + i, lz);
+    if (idx !== -1) {
+        chunkData[idx] = 4; // Log
     }
   }
   
-  generateLeaves(x, y, z, height, loadedBlocks, chunkWorldData, generatedKeys);
+  generateLeaves(lx, y, lz, height, chunkData);
+};
+
+export const getGlobalBlockType = (
+  x: number, y: number, z: number,
+  chunksData: Map<string, Uint8Array>
+): number => {
+  const rx = Math.round(x);
+  const ry = Math.round(y);
+  const rz = Math.round(z);
+
+  if (ry < Y_MIN || ry > Y_MAX) return 0;
+
+  const cx = Math.floor(rx / CHUNK_SIZE);
+  const cz = Math.floor(rz / CHUNK_SIZE);
+  const chunkData = chunksData.get(`${cx},${cz}`);
+  
+  if (!chunkData) return 0;
+  
+  const lx = ((rx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+  const lz = ((rz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+  const idx = getBlockIndex(lx, ry, lz);
+  
+  return idx !== -1 ? chunkData[idx] : 0;
 };
