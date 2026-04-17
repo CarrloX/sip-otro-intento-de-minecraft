@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, Y_MIN, Y_MAX, CHUNK_VOLUME, getBlockIndex, generateChunk } from '../services/WorldService';
+import { CHUNK_SIZE, Y_MIN, Y_MAX, CHUNK_VOLUME, getBlockIndex, noise, pseudoRandom, getTerrainType } from '../services/WorldService';
 
 const ATLAS_COLS = 6;
 const getTexIndex = (blockType: number, face: string): number => {
@@ -17,16 +17,111 @@ const getTexIndex = (blockType: number, face: string): number => {
   return 0;
 };
 
+export const PAD = 15;
+export const STRIDE = CHUNK_SIZE + PAD * 2;
+export const PADDED_VOLUME = STRIDE * STRIDE * (Y_MAX - Y_MIN + 1);
+
+const getPaddedIndex = (lx: number, y: number, lz: number) => {
+    const px = lx + PAD;
+    const pz = lz + PAD;
+    const py = y - Y_MIN;
+    if (px < 0 || px >= STRIDE || pz < 0 || pz >= STRIDE || py < 0 || py >= (Y_MAX - Y_MIN + 1)) return -1;
+    return px + (pz * STRIDE) + (py * STRIDE * STRIDE);
+};
+
 self.onmessage = (e) => {
   const { cx, cz, lodLevel, userModsArray, taskId } = e.data;
   const worldData = new Map<string, number>(userModsArray);
 
-  // 1. Generate chunk volume (Uint8Array)
-  const chunkData = generateChunk(cx, cz, worldData);
+  const startX = cx * CHUNK_SIZE;
+  const startZ = cz * CHUNK_SIZE;
 
+  // 1. Generate Padded Terrain
+  const paddedChunkData = new Uint8Array(PADDED_VOLUME);
+  
+  for (let lx = -PAD; lx < CHUNK_SIZE + PAD; lx++) {
+    for (let lz = -PAD; lz < CHUNK_SIZE + PAD; lz++) {
+      const gx = startX + lx;
+      const gz = startZ + lz;
+      const surfaceY = noise(gx, gz);
+      
+      const depth = 64; 
+      for (let y = surfaceY; y >= surfaceY - depth; y--) {
+        const idx = getPaddedIndex(lx, y, lz);
+        if (idx !== -1) {
+            paddedChunkData[idx] = getTerrainType(y, surfaceY);
+        }
+      }
+    }
+  }
+
+  // 1.5 Padded Trees overlapping
+  const TREE_OVERLAP = 2;
+  for (let lx = -PAD - TREE_OVERLAP; lx < CHUNK_SIZE + PAD + TREE_OVERLAP; lx++) {
+    for (let lz = -PAD - TREE_OVERLAP; lz < CHUNK_SIZE + PAD + TREE_OVERLAP; lz++) {
+      const gx = startX + lx;
+      const gz = startZ + lz;
+      
+      if (pseudoRandom(gx, gz) < 0.02) {
+        const surfaceY = noise(gx, gz);
+        const y = surfaceY + 1;
+        
+        // Wood
+        const height = 4;
+        for (let i = 0; i < height; i++) {
+            const idx = getPaddedIndex(lx, y + i, lz);
+            if (idx !== -1) paddedChunkData[idx] = 4;
+        }
+        
+        // Leaves
+        for (let hx = lx - 2; hx <= lx + 2; hx++) {
+            for (let hz = lz - 2; hz <= lz + 2; hz++) {
+                for (let hy = y + height - 2; hy <= y + height + 1; hy++) {
+                    const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
+                    if (dist === 4 && hy === y + height + 1) continue;
+                    const idx = getPaddedIndex(hx, hy, hz);
+                    if (idx !== -1 && (paddedChunkData[idx] === 0 || paddedChunkData[idx] === 5)) {
+                        paddedChunkData[idx] = 5;
+                    }
+                }
+            }
+        }
+      }
+    }
+  }
+
+  // 2. Apply User Mods (They include neighbors!)
+  worldData.forEach((type, key) => {
+    const [gx, gy, gz] = key.split(',').map(Number);
+    const lx = gx - startX;
+    const lz = gz - startZ;
+    const idx = getPaddedIndex(lx, gy, lz);
+    
+    if (idx !== -1) {
+      if (type === 0) {
+          paddedChunkData[idx] = 0; 
+      } else {
+          paddedChunkData[idx] = type;
+      }
+    }
+  });
+
+  // 2.5 Extract Core Chunk Data (16x16) for Main Thread Memory Storage
+  const chunkData = new Uint8Array(CHUNK_VOLUME);
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+          for (let y = Y_MIN; y <= Y_MAX; y++) {
+              const pIdx = getPaddedIndex(lx, y, lz);
+              const cIdx = getBlockIndex(lx, y, lz);
+              chunkData[cIdx] = paddedChunkData[pIdx];
+          }
+      }
+  }
+
+  // Abstraction functions using PADDED buffer
   const getBlock = (lx: number, y: number, lz: number) => {
-    const idx = getBlockIndex(lx, y, lz);
-    return idx !== -1 ? chunkData[idx] : 0;
+    const idx = getPaddedIndex(lx, y, lz);
+    return idx !== -1 ? paddedChunkData[idx] : 0;
   };
 
   const isTransparent = (type: number) => {
@@ -38,30 +133,34 @@ self.onmessage = (e) => {
       return type !== 0 && type !== 5; 
   };
 
-  // 2. Pre-calculate Heightmap
-  const heightMap = new Int16Array(CHUNK_SIZE * CHUNK_SIZE);
+  // 3. Pre-calculate Padded Heightmap
+  const heightMap = new Int16Array(STRIDE * STRIDE);
   heightMap.fill(Y_MIN - 1);
-  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+  for (let lx = -PAD; lx < CHUNK_SIZE + PAD; lx++) {
+      for (let lz = -PAD; lz < CHUNK_SIZE + PAD; lz++) {
+          const px = lx + PAD;
+          const pz = lz + PAD;
           for (let y = Y_MAX; y >= Y_MIN; y--) {
               if (getBlock(lx, y, lz) !== 0) {
-                  heightMap[lx + lz * CHUNK_SIZE] = y;
+                  heightMap[px + pz * STRIDE] = y;
                   break;
               }
           }
       }
   }
 
-  // 3. Fast Flood Fill Light Propagation (BFS mapped to 1D)
-  const lightMap = new Uint8Array(CHUNK_VOLUME);
+  // 4. Fast Flood Fill Light Propagation over Padded Bounds
+  const lightMap = new Uint8Array(PADDED_VOLUME);
   const queue: number[] = [];
 
-  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-          const surfaceY = heightMap[lx + lz * CHUNK_SIZE];
+  for (let lx = -PAD; lx < CHUNK_SIZE + PAD; lx++) {
+      for (let lz = -PAD; lz < CHUNK_SIZE + PAD; lz++) {
+          const px = lx + PAD;
+          const pz = lz + PAD;
+          const surfaceY = heightMap[px + pz * STRIDE];
           for (let y = Y_MAX; y >= Math.max(Y_MIN, surfaceY - 2); y--) {
-              const idx = getBlockIndex(lx, y, lz);
-              if (idx !== -1 && isTransparent(chunkData[idx])) {
+              const idx = getPaddedIndex(lx, y, lz);
+              if (idx !== -1 && isTransparent(paddedChunkData[idx])) {
                   lightMap[idx] = 15;
                   queue.push(lx, y, lz, 15);
               }
@@ -80,8 +179,8 @@ self.onmessage = (e) => {
       
       for (const [dx, dy, dz] of dirs) {
           const nx = lx + dx, ny = y + dy, nz = lz + dz;
-          const nIdx = getBlockIndex(nx, ny, nz);
-          if (nIdx !== -1 && isTransparent(chunkData[nIdx])) {
+          const nIdx = getPaddedIndex(nx, ny, nz);
+          if (nIdx !== -1 && isTransparent(paddedChunkData[nIdx])) {
               const currentL = lightMap[nIdx];
               const nextL = (dy === -1 && l === 15) ? 15 : l - 1;
               if (nextL > currentL) {
@@ -93,7 +192,7 @@ self.onmessage = (e) => {
   }
 
   const getLightLevel = (lx: number, y: number, lz: number) => {
-      const idx = getBlockIndex(lx, y, lz);
+      const idx = getPaddedIndex(lx, y, lz);
       return idx !== -1 ? (lightMap[idx] || 3) : 3;
   };
 
@@ -106,7 +205,7 @@ self.onmessage = (e) => {
       return 0.5 + (ao / 3.0) * 0.5;
   };
 
-  // 4. Topology Mesher
+  // 5. Topology Mesher
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
@@ -245,7 +344,7 @@ self.onmessage = (e) => {
       }
   }
 
-  // 5. Compact Arrays for Zero-Copy Transfer
+  // 6. Compact Arrays for Zero-Copy Transfer
   const posArray = new Float32Array(positions);
   const normArray = new Float32Array(normals);
   const uvArray = new Float32Array(uvs);

@@ -10,17 +10,17 @@ export const getBlockIndex = (lx: number, y: number, lz: number): number => {
   return lx + (lz * CHUNK_SIZE) + (indexY * CHUNK_SIZE * CHUNK_SIZE);
 };
 
-const pseudoRandom = (x: number, z: number) => {
+export const pseudoRandom = (x: number, z: number) => {
   let h = Math.imul(x ^ (z << 16), 0x85ebca6b);
   h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
 
-const noise = (x: number, z: number) => {
+export const noise = (x: number, z: number) => {
   return Math.floor(Math.sin(x * 0.1) * 2 + Math.cos(z * 0.1) * 2);
 };
 
-const getTerrainType = (y: number, surfaceY: number): number => {
+export const getTerrainType = (y: number, surfaceY: number): number => {
   if (y === surfaceY) return 1; // Grass
   if (y > surfaceY - 3) return 2; // Dirt
   return 3; // Stone
