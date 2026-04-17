@@ -30,7 +30,7 @@ const getPaddedIndex = (lx: number, y: number, lz: number) => {
 };
 
 self.onmessage = (e) => {
-  const { cx, cz, lodLevel, userModsArray, taskId } = e.data;
+  const { cx, cz, lodLevel, userModsArray, taskId, fancyLeaves } = e.data;
   const worldData = new Map<string, number>(userModsArray);
 
   const startX = cx * CHUNK_SIZE;
@@ -125,12 +125,17 @@ self.onmessage = (e) => {
   };
 
   const isTransparent = (type: number) => {
+      // If we are evaluating for lighting and meshing
       return type === 0 || type === 5;
   };
 
+  const effectiveFancyLeaves = lodLevel === 0 ? fancyLeaves : false;
+
   const isSolid = (lx: number, y: number, lz: number) => {
       const type = getBlock(lx, y, lz);
-      return type !== 0 && type !== 5; 
+      // Fancy leaves do not block AO. Fast leaves act like solid blocks.
+      if (effectiveFancyLeaves) return type !== 0 && type !== 5;
+      return type !== 0; 
   };
 
   // 3. Pre-calculate Padded Heightmap
@@ -141,7 +146,8 @@ self.onmessage = (e) => {
           const px = lx + PAD;
           const pz = lz + PAD;
           for (let y = Y_MAX; y >= Y_MIN; y--) {
-              if (getBlock(lx, y, lz) !== 0) {
+              const b = getBlock(lx, y, lz);
+              if (b !== 0) {
                   heightMap[px + pz * STRIDE] = y;
                   break;
               }
@@ -160,6 +166,7 @@ self.onmessage = (e) => {
           const surfaceY = heightMap[px + pz * STRIDE];
           for (let y = Y_MAX; y >= Math.max(Y_MIN, surfaceY - 2); y--) {
               const idx = getPaddedIndex(lx, y, lz);
+              // Light floods into transparent blocks
               if (idx !== -1 && isTransparent(paddedChunkData[idx])) {
                   lightMap[idx] = 15;
                   queue.push(lx, y, lz, 15);
@@ -182,7 +189,9 @@ self.onmessage = (e) => {
           const nIdx = getPaddedIndex(nx, ny, nz);
           if (nIdx !== -1 && isTransparent(paddedChunkData[nIdx])) {
               const currentL = lightMap[nIdx];
-              const nextL = (dy === -1 && l === 15) ? 15 : l - 1;
+              // Leaves act as light diffusers if passed through
+              const diffuser = paddedChunkData[nIdx] === 5 ? 2 : 1; 
+              const nextL = (dy === -1 && l === 15) ? 15 : l - diffuser;
               if (nextL > currentL) {
                   lightMap[nIdx] = nextL;
                   queue.push(nx, ny, nz, nextL);
@@ -302,6 +311,40 @@ self.onmessage = (e) => {
   };
 
 
+  const getLodVolumePrimaryType = (lx: number, y: number, lz: number, step: number) => {
+    let hasLeaves = false;
+    for (let dy = step - 1; dy >= 0; dy--) {
+        for (let dx = 0; dx < step; dx++) {
+            for (let dz = 0; dz < step; dz++) {
+                const type = getBlock(lx + dx, y + dy, lz + dz);
+                if (type !== 0 && type !== 5) return type; 
+                if (type === 5) hasLeaves = true;
+            }
+        }
+    }
+    return hasLeaves ? 5 : 0;
+  };
+
+  const shouldRenderFace = (myType: number, neighborType: number) => {
+      const isNeighborTransparent = neighborType === 0 || neighborType === 5;
+      if (!isNeighborTransparent) return false;
+      // Normal Leaves Culling (do not render faces touching other leaves)
+      if (!effectiveFancyLeaves && myType === 5 && neighborType === 5) return false;
+      return true;
+  };
+
+  const shouldRenderFaceLOD = (myType: number, neighborType: number) => {
+     // In distant LOD mode, ALWAYS treat leaves as fast/opaque blocks to save vertices.
+     // If neighbor is exact air, definitely draw faces pointing to it so landscape renders.
+     if (neighborType === 0) return true;
+     // If neighbor is leaf and we ARE a leaf... Fast Leaves means CULL to cull interior leaf faces.
+     if (myType === 5 && neighborType === 5) return false;
+     // If neighbor is leaf, and we are NOT a leaf, we must render our solid face to act as an opaque backdrop against the leaf's transparent cutout holes!
+     if (myType !== 5 && neighborType === 5) return true;
+     
+     return false; // Solid-Solid boundary, or unspecified
+  };
+
   if (lodLevel === 0) {
       for(let lx = 0; lx < CHUNK_SIZE; lx++) {
          for(let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -311,14 +354,13 @@ self.onmessage = (e) => {
                
                const gx = cx * CHUNK_SIZE + lx;
                const gz = cz * CHUNK_SIZE + lz;
-               const isMeLeaf = type === 5;
                
-               if (isTransparent(getBlock(lx,y+1,lz)) && !(isMeLeaf && getBlock(lx,y+1,lz)===5)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'top');
-               if (isTransparent(getBlock(lx,y-1,lz)) && !(isMeLeaf && getBlock(lx,y-1,lz)===5)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'bottom');
-               if (isTransparent(getBlock(lx-1,y,lz)) && !(isMeLeaf && getBlock(lx-1,y,lz)===5)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'left');
-               if (isTransparent(getBlock(lx+1,y,lz)) && !(isMeLeaf && getBlock(lx+1,y,lz)===5)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'right');
-               if (isTransparent(getBlock(lx,y,lz+1)) && !(isMeLeaf && getBlock(lx,y,lz+1)===5)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'front');
-               if (isTransparent(getBlock(lx,y,lz-1)) && !(isMeLeaf && getBlock(lx,y,lz-1)===5)) pushQuadWithAO(lx, y, lz, gx, gz, type, 'back');
+               if (shouldRenderFace(type, getBlock(lx,y+1,lz))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'top');
+               if (shouldRenderFace(type, getBlock(lx,y-1,lz))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'bottom');
+               if (shouldRenderFace(type, getBlock(lx-1,y,lz))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'left');
+               if (shouldRenderFace(type, getBlock(lx+1,y,lz))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'right');
+               if (shouldRenderFace(type, getBlock(lx,y,lz+1))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'front');
+               if (shouldRenderFace(type, getBlock(lx,y,lz-1))) pushQuadWithAO(lx, y, lz, gx, gz, type, 'back');
             }
          }
       }
@@ -326,19 +368,20 @@ self.onmessage = (e) => {
       for(let lx = 0; lx < CHUNK_SIZE; lx+=step) {
          for(let lz = 0; lz < CHUNK_SIZE; lz+=step) {
             for(let y = Y_MAX; y >= Y_MIN; y-=step) {
-               const type = getBlock(lx, y, lz);
+               const type = getLodVolumePrimaryType(lx, y, lz, step);
                if (type === 0) continue;
                
                const px = cx * CHUNK_SIZE + lx + offset;
                const py = y + offset;
                const pz = cz * CHUNK_SIZE + lz + offset;
                
-               if (isTransparent(getBlock(lx,y+step,lz))) pushQuadWithAO(lx, py, lz, px, pz, type, 'top');
-               if (isTransparent(getBlock(lx,y-step,lz))) pushQuadWithAO(lx, py, lz, px, pz, type, 'bottom');
-               if (isTransparent(getBlock(lx-step,y,lz))) pushQuadWithAO(lx, py, lz, px, pz, type, 'left');
-               if (isTransparent(getBlock(lx+step,y,lz))) pushQuadWithAO(lx, py, lz, px, pz, type, 'right');
-               if (isTransparent(getBlock(lx,y,lz+step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'front');
-               if (isTransparent(getBlock(lx,y,lz-step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'back');
+               // Volumetric Culling for LODs (Leaves are treated effectively as solid for performance)
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y+step, lz, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'top');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y-step, lz, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'bottom');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx-step, y, lz, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'left');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx+step, y, lz, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'right');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y, lz+step, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'front');
+               if (shouldRenderFaceLOD(type, getLodVolumePrimaryType(lx, y, lz-step, step))) pushQuadWithAO(lx, py, lz, px, pz, type, 'back');
             }
          }
       }

@@ -7,11 +7,12 @@ interface GameCanvasProps {
   targetFps: number;
   renderDistance: number;
   autoJump: boolean;
+  fancyLeaves: boolean;
   onStatusChange: (status: { isLocked: boolean; lockControls: () => void; fps: number }) => void;
 }
 
-const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, onStatusChange }: GameCanvasProps) => {
-  const { mountRef, isLocked, lockControls, fps } = useMinecraft(currentBlockType, targetFps, renderDistance, autoJump);
+const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fancyLeaves, onStatusChange }: GameCanvasProps) => {
+  const { mountRef, isLocked, lockControls, fps } = useMinecraft(currentBlockType, targetFps, renderDistance, autoJump, fancyLeaves);
 
   useEffect(() => {
     onStatusChange({ isLocked, lockControls, fps });

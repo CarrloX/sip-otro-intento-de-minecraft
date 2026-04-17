@@ -11,6 +11,7 @@ function App() {
   const [targetFps, setTargetFps] = useState(144);
   const [renderDistance, setRenderDistance] = useState(2);
   const [autoJump, setAutoJump] = useState(true);
+  const [fancyLeaves, setFancyLeaves] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(true); // Start with menu open
   const [lockControls, setLockControls] = useState<() => void>(() => () => {});
 
@@ -57,6 +58,7 @@ function App() {
         targetFps={targetFps}
         renderDistance={renderDistance}
         autoJump={autoJump}
+        fancyLeaves={fancyLeaves}
         onStatusChange={handleStatusChange} 
       />
 
@@ -71,6 +73,8 @@ function App() {
         onRenderDistanceChange={setRenderDistance}
         autoJump={autoJump}
         onAutoJumpChange={setAutoJump}
+        fancyLeaves={fancyLeaves}
+        onFancyLeavesChange={setFancyLeaves}
         onMenuToggle={toggleMenu}
       />
     </div>

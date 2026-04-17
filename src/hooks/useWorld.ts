@@ -8,7 +8,8 @@ export const useWorld = (
   sceneRef: React.RefObject<THREE.Scene | null>,
   materialsRef: React.RefObject<Record<number, THREE.Material | THREE.Material[]>>,
   blockGeometryRef: React.RefObject<THREE.BoxGeometry>,
-  renderDistanceRef: React.RefObject<number>
+  renderDistanceRef: React.RefObject<number>,
+  fancyLeavesRef: React.RefObject<boolean>
 ) => {
   const objectsRef = useRef<THREE.Object3D[]>([]); 
   
@@ -93,6 +94,7 @@ export const useWorld = (
   }, []);
 
   const lastRenderDistanceRef = useRef(renderDistanceRef.current);
+  const lastFancyLeavesRef = useRef(fancyLeavesRef.current);
 
   const requestChunkMesh = useCallback((cx: number, cz: number, lodLevel: number = 0) => {
      const chunkId = `${cx},${cz}`;
@@ -178,7 +180,7 @@ export const useWorld = (
 
      const worker = getAvailableWorker();
      if (worker) {
-         worker.postMessage({ cx, cz, lodLevel, userModsArray, taskId });
+         worker.postMessage({ cx, cz, lodLevel, userModsArray, taskId, fancyLeaves: fancyLeavesRef.current });
      }
   }, [materialsRef, sceneRef, updateRaycastObjects]);
 
@@ -376,9 +378,17 @@ export const useWorld = (
     };
 
 
-    if (px !== playerChunkRef.current.x || pz !== playerChunkRef.current.z || loadedChunksRef.current.size === 0 || lastRenderDistanceRef.current !== RENDER_DISTANCE) {
+    if (px !== playerChunkRef.current.x || pz !== playerChunkRef.current.z || loadedChunksRef.current.size === 0 || lastRenderDistanceRef.current !== RENDER_DISTANCE || lastFancyLeavesRef.current !== fancyLeavesRef.current) {
+      if (lastFancyLeavesRef.current !== fancyLeavesRef.current) {
+         chunkCacheRef.current.clear();
+         for (const key of loadedChunksRef.current.keys()) {
+             loadedChunksRef.current.set(key, -1);
+         }
+      }
+      
       playerChunkRef.current = { x: px, z: pz };
       lastRenderDistanceRef.current = RENDER_DISTANCE;
+      lastFancyLeavesRef.current = fancyLeavesRef.current;
       updateTargetChunks();
     }
 

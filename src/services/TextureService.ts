@@ -25,17 +25,22 @@ export const generateAtlas = () => {
       const noise = (Math.random() - 0.5) * variance;
       let modR = r_base + noise, modG = g_base + noise, modB = b_base + noise;
       
+      let alpha = 255;
       if (type === 'wood_side' && (i / 4) % 16 % 4 === 0) {
         modR -= 15; modG -= 15; modB -= 15;
       }
-      if (type === 'leaves' && Math.random() < 0.2) {
-        modR *= 0.5; modG *= 0.5; modB *= 0.5;
+      if (type === 'leaves') {
+          if (Math.random() < 0.3) {
+              alpha = 0; // Hole in the leaf
+          } else if (Math.random() < 0.2) {
+              modR *= 0.5; modG *= 0.5; modB *= 0.5;
+          }
       }
 
       data[i] = Math.min(255, Math.max(0, modR));
       data[i + 1] = Math.min(255, Math.max(0, modG));
       data[i + 2] = Math.min(255, Math.max(0, modB));
-      data[i + 3] = 255;
+      data[i + 3] = alpha;
     }
     
     context.putImageData(imageData, index * 16, 0);
@@ -54,6 +59,8 @@ export const createUnifiedMaterial = () => {
   const material = new THREE.MeshLambertMaterial({ 
      map: atlasTexture,
      vertexColors: true, // Enable per-vertex tinting for light levels
+     alphaTest: 0.5, // Enables cutout transparency for Fancy Leaves without depth-sorting bugs
+     transparent: false // Key: keep this false so Z-Buffer depth writes natively!
   });
 
   return material;

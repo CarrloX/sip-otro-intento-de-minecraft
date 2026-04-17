@@ -14,10 +14,12 @@ interface HudProps {
   onRenderDistanceChange: (distance: number) => void;
   autoJump: boolean;
   onAutoJumpChange: (autoJump: boolean) => void;
+  fancyLeaves: boolean;
+  onFancyLeavesChange: (fancyLeaves: boolean) => void;
   onMenuToggle: () => void;
 }
 
-const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, onMenuToggle }: HudProps) => {
+const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, onMenuToggle }: HudProps) => {
   return (
     <div id="ui-layer">
       <div className="debug-info">
@@ -40,6 +42,8 @@ const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange,
         onRenderDistanceChange={onRenderDistanceChange}
         autoJump={autoJump}
         onAutoJumpChange={onAutoJumpChange}
+        fancyLeaves={fancyLeaves}
+        onFancyLeavesChange={onFancyLeavesChange}
         onClose={onMenuToggle}
       />
     </div>
