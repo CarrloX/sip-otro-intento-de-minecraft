@@ -1,0 +1,24 @@
+[33m7668eb6[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m feat: implement core game engine architecture including HUD, world management, and rendering hooks
+[33mc650f16[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m feat: implement useWorld hook with multithreaded chunk generation and client-side block prediction
+[33mc6a8719[m feat: implement multi-threaded chunk generation and management using Web Workers and custom geometry buffers
+[33m9dacef5[m feat: implement procedural chunk and tree generation service with support for user modifications
+[33md171c4a[m feat: implement dynamic day-night lighting cycle and integrate into main game loop
+[33md84c554[m jelou
+[33m16c1514[m feat: implement multithreaded chunk generation and mesh processing using Web Workers
+[33m358ff89[m feat: implement multithreaded chunk generation using Web Workers and instanced rendering in useWorld hook
+[33md0cb099[m feat: implement chunk-based world rendering with LOD and InstancedMesh support
+[33m21cd2b0[m feat: implement useWorld hook with chunk management, LOD rendering, and instanced mesh support
+[33mb5c54b6[m auto-jump
+[33m8ac4d08[m colision con paredes arreglada
+[33ma1ca736[m fix: adjust player width and improve physics handling for smoother movement
+[33m214113f[m feat: implement core game engine features including lighting, keyboard input, world generation, and options menu UI
+[33mf45f65e[m feat: implement core game engine with player movement, physics, and interaction hooks
+[33m786571e[m feat: implement core game loop with FPS capping, pointer lock controls, and an interactive options menu
+[33mfb78841[m feat: implement HUD system with hotbar and optimized chunk-based world rendering with face culling
+[33m4a0de28[m feat: implement core Minecraft engine with Three.js rendering, player controls, and block interaction system
+[33m0a13888[m feat: implement core Minecraft engine hooks and services for scene rendering, block interaction, lighting, and selection highlighting
+[33m5e3fabb[m feat: implement core game engine structure including HUD, keyboard input, and Three.js canvas integration
+[33mf4aad67[m feat: implement core Minecraft mechanics including world generation, player physics, and procedural texture rendering
+[33m4e245d9[m feat: implement core Minecraft mechanics including player movement, block interaction, world generation, and 3D rendering.
+[33mc4d17c6[m eliminando basura
+[33m3c16194[m Add files via upload
