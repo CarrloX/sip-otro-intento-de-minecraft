@@ -17,8 +17,8 @@ export const pseudoRandom = (x: number, z: number) => {
 };
 
 // --- SIMPLEX NOISE IMPLEMENTATION ---
-const F2 = 0.5 * (Math.sqrt(3.0) - 1.0);
-const G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
+const F2 = 0.5 * (Math.sqrt(3) - 1);
+const G2 = (3 - Math.sqrt(3)) / 6;
 
 const grad3 = [
   [1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
@@ -67,8 +67,8 @@ const simplex2 = (xin: number, yin: number) => {
 
   const x1 = x0 - i1 + G2;
   const y1 = y0 - j1 + G2;
-  const x2 = x0 - 1.0 + 2.0 * G2;
-  const y2 = y0 - 1.0 + 2.0 * G2;
+  const x2 = x0 - 1 + 2 * G2;
+  const y2 = y0 - 1 + 2 * G2;
 
   const ii = i & 255;
   const jj = j & 255;
@@ -77,29 +77,29 @@ const simplex2 = (xin: number, yin: number) => {
   const gi2 = permMod12[ii + 1 + perm[jj + 1]];
 
   let t0 = 0.5 - x0*x0 - y0*y0;
-  if(t0 < 0) n0 = 0.0;
+  if(t0 < 0) n0 = 0;
   else {
     t0 *= t0;
     n0 = t0 * t0 * dot(grad3[gi0], x0, y0);
   }
 
   let t1 = 0.5 - x1*x1 - y1*y1;
-  if(t1 < 0) n1 = 0.0;
+  if(t1 < 0) n1 = 0;
   else {
     t1 *= t1;
     n1 = t1 * t1 * dot(grad3[gi1], x1, y1);
   }
 
   let t2 = 0.5 - x2*x2 - y2*y2;
-  if(t2 < 0) n2 = 0.0;
+  if(t2 < 0) n2 = 0;
   else {
     t2 *= t2;
     n2 = t2 * t2 * dot(grad3[gi2], x2, y2);
   }
-  return 70.0 * (n0 + n1 + n2);
+  return 70 * (n0 + n1 + n2);
 };
 
-const fbm = (x: number, y: number, octaves: number, gain: number = 0.5, lacunarity: number = 2.0) => {
+const fbm = (x: number, y: number, octaves: number, gain: number = 0.5, lacunarity: number = 2) => {
   let total = 0;
   let frequency = 1;
   let amplitude = 1;
@@ -119,14 +119,14 @@ export const noise = (x: number, z: number) => {
   const scale = 0.002;
   
   // 1. Continental Elevation - defines huge slow-moving plains or mountains
-  const elevation = fbm(x * scale, z * scale, 3, 0.5, 2.0);
+  const elevation = fbm(x * scale, z * scale, 3, 0.5, 2);
   
   // 2. High-Frequency Detail - adds bumpy characteristics and small hills
-  const detail = fbm(x * 0.008, z * 0.008, 4, 0.5, 2.0);
+  const detail = fbm(x * 0.008, z * 0.008, 4, 0.5, 2);
 
   // 3. Biome Masking
   // Smoothly normalize elevation to positive space
-  let normalizedElevation = (elevation + 1.0) / 2.0; 
+  let normalizedElevation = (elevation + 1) / 2; 
   // Sharpen the plains vs mountains contrast using exponentiation
   normalizedElevation = Math.pow(normalizedElevation, 1.8);
 
@@ -145,15 +145,11 @@ export const getTerrainType = (y: number, surfaceY: number): number => {
   return 3; // Stone
 };
 
-export const generateChunk = (
-  chunkX: number,
-  chunkZ: number,
-  chunkWorldData: Map<string, number>
-): Uint8Array => {
-  const chunkData = new Uint8Array(CHUNK_VOLUME);
-  const startX = chunkX * CHUNK_SIZE;
-  const startZ = chunkZ * CHUNK_SIZE;
-
+const generateBaseTerrain = (
+  startX: number,
+  startZ: number,
+  chunkData: Uint8Array
+) => {
   // 1. Generate Base Terrain Let's iterate linearly local coords
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -170,7 +166,13 @@ export const generateChunk = (
       }
     }
   }
+};
 
+const generateTrees = (
+  startX: number,
+  startZ: number,
+  chunkData: Uint8Array
+) => {
   // 1.5 Generate Trees with Deterministic Procedural Overlapping (fixes cross-chunk bleeding)
   const TREE_OVERLAP = 2; // Leaves extend up to 2 blocks from trunk
   for (let lx = -TREE_OVERLAP; lx < CHUNK_SIZE + TREE_OVERLAP; lx++) {
@@ -184,7 +186,14 @@ export const generateChunk = (
       }
     }
   }
+};
 
+const applyUserModifications = (
+  startX: number,
+  startZ: number,
+  chunkWorldData: Map<string, number>,
+  chunkData: Uint8Array
+) => {
   // 2. Apply User Modifications
   chunkWorldData.forEach((type, key) => {
     const [gx, gy, gz] = key.split(',').map(Number);
@@ -203,8 +212,32 @@ export const generateChunk = (
       }
     }
   });
+};
+
+export const generateChunk = (
+  chunkX: number,
+  chunkZ: number,
+  chunkWorldData: Map<string, number>
+): Uint8Array => {
+  const chunkData = new Uint8Array(CHUNK_VOLUME);
+  const startX = chunkX * CHUNK_SIZE;
+  const startZ = chunkZ * CHUNK_SIZE;
+
+  generateBaseTerrain(startX, startZ, chunkData);
+  generateTrees(startX, startZ, chunkData);
+  applyUserModifications(startX, startZ, chunkWorldData, chunkData);
 
   return chunkData;
+};
+
+const placeLeaf = (hx: number, hy: number, hz: number, chunkData: Uint8Array) => {
+  const idx = getBlockIndex(hx, hy, hz);
+  if (idx !== -1) {
+      // Only place if it's air or leaves (don't overwrite wood/stone)
+      if (chunkData[idx] === 0 || chunkData[idx] === 5) {
+          chunkData[idx] = 5; // Leaf
+      }
+  }
 };
 
 const generateLeaves = (
@@ -221,13 +254,7 @@ const generateLeaves = (
         const isCornerTop = dist === 4 && hy === centerY + height + 1;
         if (isCornerTop) continue;
         
-        const idx = getBlockIndex(hx, hy, hz);
-        if (idx !== -1) {
-            // Only place if it's air or leaves (don't overwrite wood/stone)
-            if (chunkData[idx] === 0 || chunkData[idx] === 5) {
-                chunkData[idx] = 5; // Leaf
-            }
-        }
+        placeLeaf(hx, hy, hz, chunkData);
       }
     }
   }
@@ -270,5 +297,5 @@ export const getGlobalBlockType = (
   const lz = ((rz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
   const idx = getBlockIndex(lx, ry, lz);
   
-  return idx !== -1 ? chunkData[idx] : 0;
+  return idx === -1 ? 0 : chunkData[idx];
 };

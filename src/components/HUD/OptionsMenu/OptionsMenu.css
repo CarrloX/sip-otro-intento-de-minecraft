@@ -47,6 +47,22 @@
     width: 100%;
 }
 
+.option-row.horizontal {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.option-row.spaced {
+    margin-top: 15px;
+}
+
+.option-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
 .option-label {
     font-size: 0.9rem;
     color: #888;

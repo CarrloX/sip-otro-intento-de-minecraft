@@ -53,7 +53,7 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               title="Ajustar distancia de chunks"
             />
           </div>
-          <div className="option-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="option-row horizontal">
             <span className="option-label">Auto Jump</span>
             <input 
               type="checkbox" 
@@ -62,10 +62,9 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               className="option-checkbox"
               aria-label="Auto Jump"
               title="Activar o desactivar el salto automático"
-              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
             />
           </div>
-          <div className="option-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
+          <div className="option-row horizontal spaced">
             <span className="option-label">Fancy Leaves</span>
             <input 
               type="checkbox" 
@@ -74,10 +73,9 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               className="option-checkbox"
               aria-label="Fancy Leaves"
               title="Activar o desactivar follaje semitransparente"
-              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
             />
           </div>
-          <div className="option-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
+          <div className="option-row horizontal spaced">
             <span className="option-label">Show Clouds</span>
             <input 
               type="checkbox" 
@@ -86,7 +84,6 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               className="option-checkbox"
               aria-label="Show Clouds"
               title="Activar o desactivar nubes 3D"
-              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
             />
           </div>
         </div>
