@@ -100,7 +100,7 @@ export const useWorld = (
      const chunkId = `${cx},${cz}`;
      
      const cached = chunkCacheRef.current.get(chunkId);
-     if (cached && cached.lodLevel === lodLevel) {
+     if (cached?.lodLevel === lodLevel) {
          const oldGroup = chunkMeshesRef.current.get(chunkId);
          if (oldGroup) {
             sceneRef.current?.remove(oldGroup);
@@ -232,6 +232,47 @@ export const useWorld = (
     requestChunkMesh(Math.floor(rx / CHUNK_SIZE), Math.floor(rz / CHUNK_SIZE), loadedChunksRef.current.get(chunkId) || 0);
   }, [requestChunkMesh, blockGeometryRef, materialsRef]);
 
+  const removeBlockFaces = useCallback((arr: Float32Array, nArr: Float32Array, rx: number, ry: number, rz: number): boolean => {
+      let modified = false;
+      for (let i = 0; i < arr.length; i += 12) {
+          const cx = (arr[i] + arr[i+3] + arr[i+6] + arr[i+9]) / 4;
+          const cy = (arr[i+1] + arr[i+4] + arr[i+7] + arr[i+10]) / 4;
+          const cz = (arr[i+2] + arr[i+5] + arr[i+8] + arr[i+11]) / 4;
+          const nx = nArr[i], ny = nArr[i+1], nz = nArr[i+2];
+          const bx = Math.round(cx - nx * 0.5);
+          const by = Math.round(cy - ny * 0.5);
+          const bz = Math.round(cz - nz * 0.5);
+          if (bx === rx && by === ry && bz === rz) {
+              for (let v = 0; v < 12; v++) arr[i+v] = 0; 
+              modified = true;
+          }
+      }
+      return modified;
+  }, []);
+
+  const hideBlockInMesh = useCallback((
+      chunkMesh: THREE.Object3D | undefined,
+      rx: number, ry: number, rz: number,
+      blockGeometry: THREE.BufferGeometry | null
+  ) => {
+      if (!chunkMesh || !(chunkMesh.children[0] instanceof THREE.Mesh) || !blockGeometry) return;
+      
+      const geom = chunkMesh.children[0].geometry as THREE.BufferGeometry;
+      const pos = geom.attributes.position;
+      const norm = geom.attributes.normal;
+      
+      if (pos && norm) {
+          const arr = pos.array as Float32Array;
+          const nArr = norm.array as Float32Array;
+          const modified = removeBlockFaces(arr, nArr, rx, ry, rz);
+          if (modified) pos.needsUpdate = true;
+      }
+      const fakeHoleMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.BackSide });
+      const fakeHoleMesh = new THREE.Mesh(blockGeometry, fakeHoleMat);
+      fakeHoleMesh.position.set(rx, ry, rz);
+      chunkMesh.add(fakeHoleMesh);
+  }, [removeBlockFaces]);
+
   const removeBlock = useCallback((x: number, y: number, z: number) => {
     const rx = Math.round(x);
     const ry = Math.round(y);
@@ -262,37 +303,10 @@ export const useWorld = (
     }
 
     const chunkMesh = chunkMeshesRef.current.get(chunkId);
-    if (chunkMesh && chunkMesh.children[0] instanceof THREE.Mesh) {
-       const geom = chunkMesh.children[0].geometry as THREE.BufferGeometry;
-       const pos = geom.attributes.position;
-       const norm = geom.attributes.normal;
-       if (pos && norm) {
-           const arr = pos.array as Float32Array;
-           const nArr = norm.array as Float32Array;
-           let modified = false;
-           for (let i = 0; i < arr.length; i += 12) {
-               const cx = (arr[i] + arr[i+3] + arr[i+6] + arr[i+9]) / 4;
-               const cy = (arr[i+1] + arr[i+4] + arr[i+7] + arr[i+10]) / 4;
-               const cz = (arr[i+2] + arr[i+5] + arr[i+8] + arr[i+11]) / 4;
-               const nx = nArr[i], ny = nArr[i+1], nz = nArr[i+2];
-               const bx = Math.round(cx - nx * 0.5);
-               const by = Math.round(cy - ny * 0.5);
-               const bz = Math.round(cz - nz * 0.5);
-               if (bx === rx && by === ry && bz === rz) {
-                   for (let v = 0; v < 12; v++) arr[i+v] = 0; 
-                   modified = true;
-               }
-           }
-           if (modified) pos.needsUpdate = true;
-       }
-       const fakeHoleMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.BackSide });
-       const fakeHoleMesh = new THREE.Mesh(blockGeometryRef.current, fakeHoleMat);
-       fakeHoleMesh.position.set(rx, ry, rz);
-       chunkMesh.add(fakeHoleMesh);
-    }
+    hideBlockInMesh(chunkMesh, rx, ry, rz, blockGeometryRef.current);
 
     requestChunkMesh(Math.floor(rx / CHUNK_SIZE), Math.floor(rz / CHUNK_SIZE), loadedChunksRef.current.get(chunkId) || 0);
-  }, [requestChunkMesh, blockGeometryRef]);
+  }, [requestChunkMesh, blockGeometryRef, hideBlockInMesh]);
 
   const unloadChunk = useCallback((cx: number, cz: number) => {
     const chunkId = `${cx},${cz}`;
@@ -331,60 +345,71 @@ export const useWorld = (
     updateRaycastObjects();
   }, [sceneRef, updateRaycastObjects]);
 
+  const getChunkLodLevel = useCallback((distance: number, cx: number, cz: number) => {
+      let lodLevel: number;
+      if (distance > 16) {
+          lodLevel = 2;
+      } else if (distance > 8) {
+          lodLevel = 1;
+      } else {
+          lodLevel = 0;
+      }
+      
+      const currentLod = loadedChunksRef.current.get(`${cx},${cz}`);
+      if (currentLod !== undefined) {
+          if (currentLod === 0 && distance === 9) lodLevel = 0;
+          if (currentLod === 1 && distance === 17) lodLevel = 1;
+      }
+      
+      return lodLevel;
+  }, []);
+
+  const updateTargetChunks = useCallback((px: number, pz: number, renderDistance: number) => {
+    const newTargetChunks = new Map<string, number>();
+    for (let dx = -renderDistance; dx <= renderDistance; dx++){
+      for (let dz = -renderDistance; dz <= renderDistance; dz++){
+        const cx = px + dx;
+        const cz = pz + dz;
+        const distance = Math.max(Math.abs(dx), Math.abs(dz));
+        
+        const lodLevel = getChunkLodLevel(distance, cx, cz);
+        newTargetChunks.set(`${cx},${cz}`, lodLevel);
+      }
+    }
+    targetChunksRef.current = newTargetChunks;
+  }, [getChunkLodLevel]);
+
+  const processLoads = useCallback((isLodZeroPhase: boolean) => {
+    for (const [chunkId, targetLod] of targetChunksRef.current.entries()) {
+       if (isLodZeroPhase ? targetLod !== 0 : targetLod === 0) continue; 
+       
+       const currentLod = loadedChunksRef.current.get(chunkId);
+       if (currentLod === undefined || currentLod !== targetLod) {
+           if (loadQueue.current.some(q => `${q.ccx},${q.ccz}` === chunkId)) continue;
+
+           loadQueue.current.push({
+               ccx: Number(chunkId.split(',')[0]),
+               ccz: Number(chunkId.split(',')[1]),
+               targetLod
+           });
+           loadedChunksRef.current.set(chunkId, targetLod); 
+       }
+    }
+  }, []);
+
+  const flushQueue = useCallback(() => {
+      let loads = 0;
+      while (loadQueue.current.length > 0 && loads < MAX_LOADS_PER_FRAME) {
+          const { ccx, ccz, targetLod } = loadQueue.current.shift()!;
+          requestChunkMesh(ccx, ccz, targetLod);
+          loads++;
+      }
+  }, [requestChunkMesh]);
+
   const manageChunks = useCallback((cameraPosition: THREE.Vector3) => {
     const RENDER_DISTANCE = renderDistanceRef.current; 
     const px = Math.floor(cameraPosition.x / CHUNK_SIZE);
     const pz = Math.floor(cameraPosition.z / CHUNK_SIZE);
-
-    const updateTargetChunks = () => {
-      const newTargetChunks = new Map<string, number>();
-      for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++){
-        for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++){
-          const cx = px + dx;
-          const cz = pz + dz;
-          const distance = Math.max(Math.abs(dx), Math.abs(dz));
-          
-          let lodLevel = distance > 16 ? 2 : (distance > 8 ? 1 : 0);
-          
-          const currentLod = loadedChunksRef.current.get(`${cx},${cz}`);
-          if (currentLod !== undefined) {
-              if (currentLod === 0 && distance === 9) lodLevel = 0;
-              if (currentLod === 1 && distance === 17) lodLevel = 1;
-          }
-
-          newTargetChunks.set(`${cx},${cz}`, lodLevel);
-        }
-      }
-      targetChunksRef.current = newTargetChunks;
-    };
- 
-    const processLoads = (isLodZeroPhase: boolean) => {
-      for (const [chunkId, targetLod] of targetChunksRef.current.entries()) {
-         if (isLodZeroPhase ? targetLod !== 0 : targetLod === 0) continue; 
-         
-         const currentLod = loadedChunksRef.current.get(chunkId);
-         if (currentLod === undefined || currentLod !== targetLod) {
-             if (loadQueue.current.some(q => `${q.ccx},${q.ccz}` === chunkId)) continue;
-
-             loadQueue.current.push({
-                 ccx: Number(chunkId.split(',')[0]),
-                 ccz: Number(chunkId.split(',')[1]),
-                 targetLod
-             });
-             loadedChunksRef.current.set(chunkId, targetLod); 
-         }
-      }
-    };
-
-    const flushQueue = () => {
-        let loads = 0;
-        while (loadQueue.current.length > 0 && loads < MAX_LOADS_PER_FRAME) {
-            const { ccx, ccz, targetLod } = loadQueue.current.shift()!;
-            requestChunkMesh(ccx, ccz, targetLod);
-            loads++;
-        }
-    };
-
 
     if (px !== playerChunkRef.current.x || pz !== playerChunkRef.current.z || loadedChunksRef.current.size === 0 || lastRenderDistanceRef.current !== RENDER_DISTANCE || lastFancyLeavesRef.current !== fancyLeavesRef.current) {
       if (lastFancyLeavesRef.current !== fancyLeavesRef.current) {
@@ -397,7 +422,7 @@ export const useWorld = (
       playerChunkRef.current = { x: px, z: pz };
       lastRenderDistanceRef.current = RENDER_DISTANCE;
       lastFancyLeavesRef.current = fancyLeavesRef.current;
-      updateTargetChunks();
+      updateTargetChunks(px, pz, RENDER_DISTANCE);
     }
 
     for (const chunkId of loadedChunksRef.current.keys()) {
@@ -411,7 +436,7 @@ export const useWorld = (
     processLoads(false);
     flushQueue();
  
-  }, [requestChunkMesh, unloadChunk]);
+  }, [requestChunkMesh, unloadChunk, updateTargetChunks, processLoads, flushQueue]);
 
   return React.useMemo(() => ({
     objectsRef,

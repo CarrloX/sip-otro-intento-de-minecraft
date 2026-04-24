@@ -18,7 +18,8 @@ export const initDB = (): Promise<IDBDatabase> => {
     };
 
     request.onerror = (event) => {
-      reject((event.target as IDBOpenDBRequest).error);
+      const error = (event.target as IDBOpenDBRequest).error;
+      reject(new Error(error?.message || 'Failed to open database'));
     };
   });
 };
@@ -30,7 +31,7 @@ export const saveBlock = async (db: IDBDatabase, key: string, type: number): Pro
     const request = store.put(type, key);
 
     request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    request.onerror = () => reject(new Error(request.error?.message || 'Failed to save block'));
   });
 };
 
@@ -62,7 +63,7 @@ export const loadAllBlocks = async (db: IDBDatabase): Promise<Map<string, number
       }
     };
 
-    request.onerror = () => reject(request.error);
-    keysRequest.onerror = () => reject(keysRequest.error);
+    request.onerror = () => reject(new Error(request.error?.message || 'Failed to load blocks'));
+    keysRequest.onerror = () => reject(new Error(keysRequest.error?.message || 'Failed to load keys'));
   });
 };

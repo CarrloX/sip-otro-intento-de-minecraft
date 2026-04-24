@@ -13,13 +13,16 @@ export const generateAtlas = () => {
     const imageData = context.createImageData(16, 16);
     const data = imageData.data;
     
-    let r_base = 0, g_base = 0, b_base = 0, variance = 0;
-    if (type === 'grass_top') { r_base = 65; g_base = 152; b_base = 49; variance = 15; }
-    else if (type === 'dirt') { r_base = 121; g_base = 85; b_base = 58; variance = 10; }
-    else if (type === 'stone') { r_base = 128; g_base = 128; b_base = 128; variance = 20; }
-    else if (type === 'wood_side') { r_base = 106; g_base = 75; b_base = 53; variance = 10; }
-    else if (type === 'wood_top') { r_base = 160; g_base = 130; b_base = 90; variance = 5; }
-    else if (type === 'leaves') { r_base = 59; g_base = 122; b_base = 45; variance = 20; }
+    const textureParams: Record<string, { r: number, g: number, b: number, v: number }> = {
+        'dirt': { r: 121, g: 85, b: 58, v: 10 },
+        'grass_top': { r: 65, g: 152, b: 49, v: 15 },
+        'stone': { r: 128, g: 128, b: 128, v: 20 },
+        'wood_side': { r: 106, g: 75, b: 53, v: 10 },
+        'wood_top': { r: 160, g: 130, b: 90, v: 5 },
+        'leaves': { r: 59, g: 122, b: 45, v: 20 }
+    };
+    
+    const { r: r_base, g: g_base, b: b_base, v: variance } = textureParams[type] || textureParams['dirt'];
 
     for (let i = 0; i < data.length; i += 4) {
       const noise = (Math.random() - 0.5) * variance;
@@ -101,7 +104,7 @@ export const createCloudMaterial = () => {
              const v4  = grid4[Math.floor(x / 4) + Math.floor(y / 4) * 16];
              
              // Blend layers
-             const noise = (v16 * 1.0 + v8 * 0.5 + v4 * 0.25) / 1.75;
+             const noise = (v16 * 1 + v8 * 0.5 + v4 * 0.25) / 1.75;
              
              const i = (x + y * 64) * 4;
              // Cutoff threshold to create isolated islands and fluffy clusters
