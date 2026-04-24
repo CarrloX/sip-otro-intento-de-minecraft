@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { createMaterials } from '../services/TextureService';
@@ -45,7 +45,7 @@ const updateDebugUI = (camera: THREE.PerspectiveCamera) => {
   }
 };
 
-export const useMinecraft = (currentBlockType: number, targetFps: number = 144, renderDistance: number = 2, autoJump: boolean = true, fancyLeaves: boolean = true, showClouds: boolean = true) => {
+export const useMinecraft = (currentBlockType: number, targetFps: number = 144, renderDistance: number = 12, autoJump: boolean = true, fancyLeaves: boolean = true, showClouds: boolean = true, seed: number = 0, onWorldReady?: () => void) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
@@ -101,7 +101,16 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
     }
   }, [showClouds]);
   
-  const world = useWorld(sceneRef, materialsRef, blockGeometryRef, renderDistanceRef, fancyLeavesRef);
+  const seedRef = useRef(seed);
+  useEffect(() => { seedRef.current = seed; }, [seed]);
+
+  const isWorldReadyRef = useRef(false);
+  const handleWorldReady = useCallback(() => {
+    isWorldReadyRef.current = true;
+    onWorldReady?.();
+  }, [onWorldReady]);
+
+  const world = useWorld(sceneRef, materialsRef, blockGeometryRef, renderDistanceRef, fancyLeavesRef, seedRef, handleWorldReady);
 
   const autoJumpRef = useRef(autoJump);
   useEffect(() => {
@@ -120,9 +129,9 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
     hoveredBlockRef
   );
 
-  const lockControls = () => {
+  const lockControls = useCallback(() => {
     controlsRef.current?.lock();
-  };
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/rules-of-hooks, react-hooks/immutability
@@ -161,6 +170,12 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
     const onUnlock = () => setIsLocked(false);
     controls.addEventListener('lock', onLock);
     controls.addEventListener('unlock', onUnlock);
+
+    // If pointer is already locked (e.g. from StartScreen click), sync state
+    if (document.pointerLockElement === document.body) {
+      controls.isLocked = true;
+      setIsLocked(true);
+    }
 
     // 5. Shared Resources
     materialsRef.current = createMaterials();
@@ -204,14 +219,12 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
 
       if (controls.isLocked) {
         // Delegate updates to specialized hooks
-        player.update(delta, camera, controls);
-        world.manageChunks(camera.position);
+        if (isWorldReadyRef.current) {
+          player.update(delta, camera, controls);
+        }
         
         // Update Debug Coordinates
         updateDebugUI(camera);
-
-        worldTime += delta * TIME_SPEED;
-        updateLighting(scene, lightingSystem, worldTime, camera.position);
 
         hoveredBlockRef.current = updateSelection(
           camera,
@@ -229,6 +242,11 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
         highlighter.visible = false;
         hoveredBlockRef.current = null;
       }
+      
+      // Manage chunks and update time/lighting even when unlocked/paused
+      world.manageChunks(camera.position);
+      worldTime += delta * TIME_SPEED;
+      updateLighting(scene, lightingSystem, worldTime, camera.position);
       
       prevTime.current = time;
       renderer.render(scene, camera);

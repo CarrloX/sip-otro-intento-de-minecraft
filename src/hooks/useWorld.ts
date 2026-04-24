@@ -9,9 +9,17 @@ export const useWorld = (
   materialsRef: React.RefObject<Record<number, THREE.Material | THREE.Material[]>>,
   blockGeometryRef: React.RefObject<THREE.BoxGeometry>,
   renderDistanceRef: React.RefObject<number>,
-  fancyLeavesRef: React.RefObject<boolean>
+  fancyLeavesRef: React.RefObject<boolean>,
+  seedRef: React.RefObject<number>,
+  onWorldReady?: () => void
 ) => {
-  const objectsRef = useRef<THREE.Object3D[]>([]); 
+  const objectsRef = useRef<THREE.Object3D[]>([]);
+  const isReadyRef = useRef(false);
+  const onWorldReadyRef = useRef(onWorldReady);
+  
+  useEffect(() => {
+    onWorldReadyRef.current = onWorldReady;
+  }, [onWorldReady]); 
   
   const chunksDataRef = useRef<Map<string, Uint8Array>>(new Map()); 
   const worldDataRef = useRef<Map<string, Map<string, number>>>(new Map()); 
@@ -138,6 +146,11 @@ export const useWorld = (
 
          chunksDataRef.current.set(chunkId, chunkData);
 
+         if (chunksDataRef.current.size >= 9 && !isReadyRef.current) {
+             isReadyRef.current = true;
+             onWorldReadyRef.current?.();
+         }
+
          const unifiedMaterial = materialsRef.current?.[1];
          if (!unifiedMaterial || posArray.length === 0) return;
 
@@ -187,7 +200,8 @@ export const useWorld = (
 
          worker.postMessage({ 
             cx, cz, lodLevel, userModsArray, taskId, fancyLeaves: fancyLeavesRef.current,
-            neighborLODs: { lodLeft, lodRight, lodTop, lodBottom }
+            neighborLODs: { lodLeft, lodRight, lodTop, lodBottom },
+            seed: seedRef.current
          });
      }
   }, [materialsRef, sceneRef, updateRaycastObjects]);
@@ -366,16 +380,22 @@ export const useWorld = (
 
   const updateTargetChunks = useCallback((px: number, pz: number, renderDistance: number) => {
     const newTargetChunks = new Map<string, number>();
-    for (let dx = -renderDistance; dx <= renderDistance; dx++){
-      for (let dz = -renderDistance; dz <= renderDistance; dz++){
-        const cx = px + dx;
-        const cz = pz + dz;
-        const distance = Math.max(Math.abs(dx), Math.abs(dz));
-        
-        const lodLevel = getChunkLodLevel(distance, cx, cz);
-        newTargetChunks.set(`${cx},${cz}`, lodLevel);
+    
+    // Generate chunks in concentric rings starting from the player's center
+    for (let distance = 0; distance <= renderDistance; distance++) {
+      for (let dx = -distance; dx <= distance; dx++) {
+        for (let dz = -distance; dz <= distance; dz++) {
+          // Only add chunks that are exactly on the current ring
+          if (Math.max(Math.abs(dx), Math.abs(dz)) === distance) {
+            const cx = px + dx;
+            const cz = pz + dz;
+            const lodLevel = getChunkLodLevel(distance, cx, cz);
+            newTargetChunks.set(`${cx},${cz}`, lodLevel);
+          }
+        }
       }
     }
+    
     targetChunksRef.current = newTargetChunks;
   }, [getChunkLodLevel]);
 
@@ -422,6 +442,12 @@ export const useWorld = (
       playerChunkRef.current = { x: px, z: pz };
       lastRenderDistanceRef.current = RENDER_DISTANCE;
       lastFancyLeavesRef.current = fancyLeavesRef.current;
+      
+      // Reset ready state if we completely cleared chunks
+      if (loadedChunksRef.current.size === 0) {
+        isReadyRef.current = false;
+      }
+      
       updateTargetChunks(px, pz, RENDER_DISTANCE);
     }
 

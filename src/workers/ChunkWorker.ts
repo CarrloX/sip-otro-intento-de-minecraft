@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, Y_MIN, Y_MAX, CHUNK_VOLUME, getBlockIndex, noise, pseudoRandom, getTerrainType } from '../services/WorldService';
+import { CHUNK_SIZE, Y_MIN, Y_MAX, CHUNK_VOLUME, getBlockIndex, noise, pseudoRandom, getTerrainType, setGlobalSeed } from '../services/WorldService';
 
 const ATLAS_COLS = 6;
 const getTexIndex = (blockType: number, face: string): number => {
@@ -507,8 +507,12 @@ class ChunkBuilder {
 }
 
 globalThis.onmessage = (e) => {
-  const { cx, cz, lodLevel, userModsArray, taskId, fancyLeaves, neighborLODs } = e.data;
+  const { cx, cz, lodLevel, userModsArray, taskId, fancyLeaves, neighborLODs, seed } = e.data;
   
+  if (seed !== undefined) {
+      setGlobalSeed(seed);
+  }
+
   const builder = new ChunkBuilder(cx, cz, lodLevel, userModsArray, taskId, fancyLeaves, neighborLODs);
   const result = builder.build();
 

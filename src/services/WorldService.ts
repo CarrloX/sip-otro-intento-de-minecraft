@@ -10,8 +10,16 @@ export const getBlockIndex = (lx: number, y: number, lz: number): number => {
   return lx + (lz * CHUNK_SIZE) + (indexY * CHUNK_SIZE * CHUNK_SIZE);
 };
 
+export let globalSeedOffset = 0;
+
+export const setGlobalSeed = (seed: number) => {
+  globalSeedOffset = seed;
+};
+
 export const pseudoRandom = (x: number, z: number) => {
-  let h = Math.imul(x ^ (z << 16), 0x85ebca6b);
+  const sx = x + globalSeedOffset;
+  const sz = z + globalSeedOffset;
+  let h = Math.imul(sx ^ (sz << 16), 0x85ebca6b);
   h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
@@ -117,12 +125,14 @@ const fbm = (x: number, y: number, octaves: number, gain: number = 0.5, lacunari
 // --- NATURAL BIOME GENERATION ---
 export const noise = (x: number, z: number) => {
   const scale = 0.002;
+  const sx = x + globalSeedOffset;
+  const sz = z + globalSeedOffset;
   
   // 1. Continental Elevation - defines huge slow-moving plains or mountains
-  const elevation = fbm(x * scale, z * scale, 3, 0.5, 2);
+  const elevation = fbm(sx * scale, sz * scale, 3, 0.5, 2);
   
   // 2. High-Frequency Detail - adds bumpy characteristics and small hills
-  const detail = fbm(x * 0.008, z * 0.008, 4, 0.5, 2);
+  const detail = fbm(sx * 0.008, sz * 0.008, 4, 0.5, 2);
 
   // 3. Biome Masking
   // Smoothly normalize elevation to positive space

@@ -67,3 +67,14 @@ export const loadAllBlocks = async (db: IDBDatabase): Promise<Map<string, number
     keysRequest.onerror = () => reject(new Error(keysRequest.error?.message || 'Failed to load keys'));
   });
 };
+
+export const clearDB = async (db: IDBDatabase): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.clear();
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error(request.error?.message || 'Failed to clear database'));
+  });
+};
