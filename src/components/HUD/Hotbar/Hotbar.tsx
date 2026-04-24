@@ -53,6 +53,10 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
           className={`slot ${currentBlockType === num ? 'active' : ''}`}
           id={`slot-${num}`}
           title={`${num} - Bloque`}
+          onClick={() => {
+            setCurrentBlockType(num);
+            onBlockChange(num);
+          }}
         ></div>
       ))}
     </div>

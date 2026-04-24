@@ -217,7 +217,9 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
         lastFpsUpdate.current = time;
       }
 
-      if (controls.isLocked) {
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window);
+      
+      if (controls.isLocked || isMobile) {
         // Delegate updates to specialized hooks
         if (isWorldReadyRef.current) {
           player.update(delta, camera, controls);
@@ -275,5 +277,23 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { mountRef, isLocked, lockControls, fps };
+  const handleMobileLook = useCallback((movementX: number, movementY: number) => {
+    if (!cameraRef.current) return;
+    const camera = cameraRef.current;
+    const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+    euler.setFromQuaternion(camera.quaternion);
+    euler.y -= movementX * 0.005;
+    euler.x -= movementY * 0.005;
+    euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
+    camera.quaternion.setFromEuler(euler);
+  }, []);
+
+  const handleMobileInteract = useCallback((isPlace: boolean = false) => {
+    // We create a minimal MouseEvent-like object that satisfies handleMouseDown
+    interaction.handleMouseDown({ button: isPlace ? 2 : 0 } as unknown as MouseEvent);
+  }, [interaction]);
+
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window);
+
+  return { mountRef, isLocked: isLocked || isMobile, lockControls, fps, handleMobileLook, handleMobileInteract };
 };

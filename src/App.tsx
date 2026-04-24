@@ -6,6 +6,8 @@ import Hud from './components/HUD/HUD';
 import StartScreen from './components/StartScreen/StartScreen';
 import { initDB, clearDB } from './services/StorageService';
 
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (typeof window !== 'undefined' && 'ontouchstart' in window);
+
 function App() {
   const [gameState, setGameState] = useState<'start' | 'loading' | 'playing'>('start');
   const [seed, setSeed] = useState<number>(0);
@@ -13,9 +15,9 @@ function App() {
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
   const [targetFps, setTargetFps] = useState(144);
-  const [renderDistance, setRenderDistance] = useState(12);
+  const [renderDistance, setRenderDistance] = useState(isMobile ? 6 : 12);
   const [autoJump, setAutoJump] = useState(true);
-  const [fancyLeaves, setFancyLeaves] = useState(true);
+  const [fancyLeaves, setFancyLeaves] = useState(isMobile ? false : true);
   const [showClouds, setShowClouds] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(true); // Start with menu open
   const [lockControls, setLockControls] = useState<() => void>(() => () => {});
@@ -96,6 +98,7 @@ function App() {
             fancyLeaves={fancyLeaves}
             showClouds={showClouds}
             seed={seed}
+            isMenuOpen={isMenuOpen}
             onWorldReady={() => setGameState('playing')}
             onStatusChange={handleStatusChange} 
           />
