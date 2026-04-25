@@ -39,8 +39,8 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
       });
     };
 
-    window.addEventListener('wheel', handleWheel);
-    return () => window.removeEventListener('wheel', handleWheel);
+    globalThis.addEventListener('wheel', handleWheel);
+    return () => globalThis.removeEventListener('wheel', handleWheel);
   }, [isVisible, onBlockChange]);
 
   if (!isVisible) return null;
@@ -48,16 +48,18 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
   return (
     <div className="hotbar" id="hotbar">
       {[1, 2, 3, 4, 5].map((num) => (
-        <div
+        <button
           key={num}
+          type="button"
           className={`slot ${currentBlockType === num ? 'active' : ''}`}
           id={`slot-${num}`}
+          aria-label={`Select block ${num}`}
           title={`${num} - Bloque`}
           onClick={() => {
             setCurrentBlockType(num);
             onBlockChange(num);
           }}
-        ></div>
+        ></button>
       ))}
     </div>
   );

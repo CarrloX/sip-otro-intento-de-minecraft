@@ -4,7 +4,7 @@ import './MobileControls.css';
 interface MobileControlsProps {
   onLook: (movementX: number, movementY: number) => void;
   onInteract: () => void;
-  onPlace: () => void; // Extra feature: Two finger tap to place, or separate button
+  onPlace: () => void;
 }
 
 export const simulateKey = (key: string, type: 'keydown' | 'keyup') => {
@@ -12,7 +12,6 @@ export const simulateKey = (key: string, type: 'keydown' | 'keyup') => {
 };
 
 const MobileControls: React.FC<MobileControlsProps> = ({ onLook, onInteract, onPlace }) => {
-  const joystickRef = useRef<HTMLDivElement>(null);
   const touchLeftId = useRef<number | null>(null);
   const touchRightId = useRef<number | null>(null);
   
@@ -27,7 +26,7 @@ const MobileControls: React.FC<MobileControlsProps> = ({ onLook, onInteract, onP
   const keysState = useRef({ w: false, a: false, s: false, d: false });
 
   const updateKeys = (dx: number, dy: number) => {
-    const threshold = 20; // pixels
+    const threshold = 20; 
     const newKeys = {
       w: dy < -threshold,
       s: dy > threshold,
@@ -44,20 +43,16 @@ const MobileControls: React.FC<MobileControlsProps> = ({ onLook, onInteract, onP
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    const halfWidth = window.innerWidth / 2;
+    const halfWidth = globalThis.innerWidth / 2;
 
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches[i];
+    for (const touch of Array.from(e.changedTouches)) {
       if (touch.clientX < halfWidth && touchLeftId.current === null) {
-        // Left side: Joystick
         touchLeftId.current = touch.identifier;
         joyStart.current = { x: touch.clientX, y: touch.clientY };
         setJoyCenter({ x: touch.clientX, y: touch.clientY });
         setJoyPos({ x: 0, y: 0 });
         setJoyActive(true);
       } else if (touch.clientX >= halfWidth && touchRightId.current === null) {
-        // Right side: Look
-        // Ignore if touching a button
         if ((touch.target as HTMLElement).tagName.toLowerCase() === 'button') continue;
         
         touchRightId.current = touch.identifier;
@@ -68,14 +63,12 @@ const MobileControls: React.FC<MobileControlsProps> = ({ onLook, onInteract, onP
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches[i];
-      
+    for (const touch of Array.from(e.changedTouches)) {
       if (touch.identifier === touchLeftId.current) {
         let dx = touch.clientX - joyStart.current.x;
         let dy = touch.clientY - joyStart.current.y;
         
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        const distance = Math.hypot(dx, dy);
         const maxDist = 50;
         
         if (distance > maxDist) {
@@ -95,9 +88,7 @@ const MobileControls: React.FC<MobileControlsProps> = ({ onLook, onInteract, onP
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const touch = e.changedTouches[i];
-      
+    for (const touch of Array.from(e.changedTouches)) {
       if (touch.identifier === touchLeftId.current) {
         touchLeftId.current = null;
         setJoyActive(false);
@@ -105,20 +96,37 @@ const MobileControls: React.FC<MobileControlsProps> = ({ onLook, onInteract, onP
       } else if (touch.identifier === touchRightId.current) {
         touchRightId.current = null;
         
-        // Tap to interact
         const dx = touch.clientX - rightStart.current.x;
         const dy = touch.clientY - rightStart.current.y;
         const dt = Date.now() - rightStart.current.time;
-        if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 300) {
+        if (Math.hypot(dx, dy) < 10 && dt < 300) {
           onInteract();
         }
       }
     }
   };
 
+  const joystickBaseRef = useRef<HTMLDivElement>(null);
+  const joystickKnobRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (joystickBaseRef.current) {
+      joystickBaseRef.current.style.left = `${joyCenter.x}px`;
+      joystickBaseRef.current.style.top = `${joyCenter.y}px`;
+    }
+  }, [joyCenter, joyActive]);
+
+  useEffect(() => {
+    if (joystickKnobRef.current) {
+      joystickKnobRef.current.style.transform = `translate(${joyPos.x}px, ${joyPos.y}px)`;
+    }
+  }, [joyPos, joyActive]);
+
   return (
     <div 
       className="mobile-controls-layer"
+      role="application"
+      aria-label="Touch Controls Overlay"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -127,19 +135,19 @@ const MobileControls: React.FC<MobileControlsProps> = ({ onLook, onInteract, onP
     >
       {joyActive && (
         <div 
+          ref={joystickBaseRef}
           className="mobile-joystick-base" 
-          style={{ left: joyCenter.x, top: joyCenter.y }}
         >
           <div 
+            ref={joystickKnobRef}
             className="mobile-joystick-knob" 
-            style={{ transform: `translate(${joyPos.x}px, ${joyPos.y}px)` }}
           />
         </div>
       )}
 
       <button 
          className="mobile-btn pause-btn"
-         style={{ position: 'absolute', top: 20, right: 20 }}
+         aria-label="Pause Menu"
          onTouchStart={(e) => { e.stopPropagation(); simulateKey('Escape', 'keydown'); simulateKey('Escape', 'keyup'); }}
       >
         ||

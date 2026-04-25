@@ -17,11 +17,20 @@ interface GameCanvasProps {
 }
 
 const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fancyLeaves, showClouds, seed, isMenuOpen, onWorldReady, onStatusChange }: GameCanvasProps) => {
-  const { mountRef, isLocked, lockControls, fps, handleMobileLook, handleMobileInteract } = useMinecraft(currentBlockType, targetFps, renderDistance, autoJump, fancyLeaves, showClouds, seed, onWorldReady);
+  const { mountRef, isLocked, lockControls, fps, handleMobileLook, handleMobileInteract } = useMinecraft({
+    currentBlockType,
+    targetFps,
+    renderDistance,
+    autoJump,
+    fancyLeaves,
+    showClouds,
+    seed,
+    onWorldReady
+  });
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window));
+    setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in globalThis));
   }, []);
 
   useEffect(() => {
@@ -30,9 +39,11 @@ const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fan
 
   return (
     <>
-      <div 
+      <button 
         ref={mountRef} 
         className="game-mount" 
+        type="button"
+        aria-label="Start Game"
         onClick={() => {
           if (!isLocked && !isMobile) lockControls();
         }}

@@ -34,6 +34,7 @@ body {
   justify-content: center;
   align-items: center;
   z-index: 9999;
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   color: white;
   font-family: 'Inter', 'Segoe UI', sans-serif;
@@ -46,6 +47,7 @@ body {
   text-transform: uppercase;
   background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: pulseText 1.5s infinite alternate;
 }

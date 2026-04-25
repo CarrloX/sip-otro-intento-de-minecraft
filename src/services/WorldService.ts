@@ -10,11 +10,13 @@ export const getBlockIndex = (lx: number, y: number, lz: number): number => {
   return lx + (lz * CHUNK_SIZE) + (indexY * CHUNK_SIZE * CHUNK_SIZE);
 };
 
-export let globalSeedOffset = 0;
+let globalSeedOffset = 0;
 
 export const setGlobalSeed = (seed: number) => {
   globalSeedOffset = seed;
 };
+
+export const getGlobalSeed = () => globalSeedOffset;
 
 export const pseudoRandom = (x: number, z: number) => {
   const sx = x + globalSeedOffset;

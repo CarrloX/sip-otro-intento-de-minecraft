@@ -45,8 +45,28 @@ const updateDebugUI = (camera: THREE.PerspectiveCamera) => {
   }
 };
 
-export const useMinecraft = (currentBlockType: number, targetFps: number = 144, renderDistance: number = 12, autoJump: boolean = true, fancyLeaves: boolean = true, showClouds: boolean = true, seed: number = 0, onWorldReady?: () => void) => {
-  const mountRef = useRef<HTMLDivElement>(null);
+export interface MinecraftOptions {
+  currentBlockType: number;
+  targetFps?: number;
+  renderDistance?: number;
+  autoJump?: boolean;
+  fancyLeaves?: boolean;
+  showClouds?: boolean;
+  seed?: number;
+  onWorldReady?: () => void;
+}
+
+export const useMinecraft = ({
+  currentBlockType,
+  targetFps = 144,
+  renderDistance = 12,
+  autoJump = true,
+  fancyLeaves = true,
+  showClouds = true,
+  seed = 0,
+  onWorldReady
+}: MinecraftOptions) => {
+  const mountRef = useRef<HTMLButtonElement>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
   const frameCount = useRef(0);
@@ -217,7 +237,7 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
         lastFpsUpdate.current = time;
       }
 
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window);
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in globalThis);
       
       if (controls.isLocked || isMobile) {
         // Delegate updates to specialized hooks
@@ -293,7 +313,7 @@ export const useMinecraft = (currentBlockType: number, targetFps: number = 144, 
     interaction.handleMouseDown({ button: isPlace ? 2 : 0 } as unknown as MouseEvent);
   }, [interaction]);
 
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window);
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in globalThis);
 
   return { mountRef, isLocked: isLocked || isMobile, lockControls, fps, handleMobileLook, handleMobileInteract };
 };
