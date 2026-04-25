@@ -182,7 +182,7 @@ export const useMinecraft = ({
     rendererRef.current = renderer;
 
     // 4. Init Controls
-    const controls = new PointerLockControls(camera, document.body);
+    const controls = new PointerLockControls(camera, renderer.domElement);
     scene.add(controls.object);
     controlsRef.current = controls;
 
@@ -192,7 +192,7 @@ export const useMinecraft = ({
     controls.addEventListener('unlock', onUnlock);
 
     // If pointer is already locked (e.g. from StartScreen click), sync state
-    if (document.pointerLockElement === document.body) {
+    if (document.pointerLockElement === document.body || document.pointerLockElement === renderer.domElement) {
       controls.isLocked = true;
       setIsLocked(true);
     }

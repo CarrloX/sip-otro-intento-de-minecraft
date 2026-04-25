@@ -4,9 +4,10 @@ import './App.css';
 import GameCanvas from './components/GameCanvas/GameCanvas';
 import Hud from './components/HUD/HUD';
 import StartScreen from './components/StartScreen/StartScreen';
+import Console from './components/Console/Console';
 import { initDB, clearDB } from './services/StorageService';
 
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (typeof window !== 'undefined' && 'ontouchstart' in window);
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (globalThis.window !== undefined && 'ontouchstart' in globalThis);
 
 function App() {
   const [gameState, setGameState] = useState<'start' | 'loading' | 'playing'>('start');
@@ -17,14 +18,19 @@ function App() {
   const [targetFps, setTargetFps] = useState(144);
   const [renderDistance, setRenderDistance] = useState(isMobile ? 6 : 12);
   const [autoJump, setAutoJump] = useState(true);
-  const [fancyLeaves, setFancyLeaves] = useState(isMobile ? false : true);
+  const [fancyLeaves, setFancyLeaves] = useState(!isMobile);
   const [showClouds, setShowClouds] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(true); // Start with menu open
+  const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [lockControls, setLockControls] = useState<() => void>(() => () => {});
 
   const { actions } = useKeyboard();
 
   const wasLockedRef = useRef(false);
+  const isConsoleOpenRef = useRef(false);
+  const ignoreNextUnlockRef = useRef(false);
+
+  const justClosedConsoleRef = useRef(false);
 
   const handleStatusChange = useCallback((status: { isLocked: boolean; lockControls: () => void; fps: number }) => {
     setIsLocked(status.isLocked);
@@ -33,34 +39,75 @@ function App() {
     
     // Auto-open menu if game transitions from locked to unlocked (e.g. via ESC key)
     if (!status.isLocked && wasLockedRef.current) {
-      setIsMenuOpen(true);
+      if (ignoreNextUnlockRef.current) {
+        ignoreNextUnlockRef.current = false;
+      } else {
+        setIsMenuOpen(true);
+      }
     }
     
     wasLockedRef.current = status.isLocked;
   }, []);
 
   const toggleMenu = useCallback(() => {
-    setIsMenuOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        document.exitPointerLock?.();
-      } else {
-        // Automatically try to relock when closing the menu with 'P'
-        lockControls();
-      }
-      return next;
-    });
-  }, [lockControls]);
+    if (isMenuOpen) {
+      lockControls();
+    } else {
+      document.exitPointerLock?.();
+    }
+    setIsMenuOpen(!isMenuOpen);
+  }, [isMenuOpen, lockControls]);
 
   const lastMenuAction = useRef(false);
+  const lastChatAction = useRef(false);
 
   useEffect(() => {
-    // Detect key down transition
+    // Detect key down transition for menu
     if (actions.menu && !lastMenuAction.current) {
-      toggleMenu();
+      if (isConsoleOpenRef.current) {
+        // If console is open but unfocused, Escape should close it, not open the menu
+        isConsoleOpenRef.current = false;
+        justClosedConsoleRef.current = true;
+        setTimeout(() => { justClosedConsoleRef.current = false; }, 200);
+        setIsConsoleOpen(false);
+        lockControls();
+      } else if (!justClosedConsoleRef.current) {
+        toggleMenu();
+      }
     }
     lastMenuAction.current = actions.menu;
-  }, [actions.menu, toggleMenu]);
+
+    // Detect key down transition for chat
+    if (actions.chat && !lastChatAction.current && gameState === 'playing' && !isConsoleOpenRef.current && !isMenuOpen) {
+      isConsoleOpenRef.current = true;
+      ignoreNextUnlockRef.current = true;
+      setIsConsoleOpen(true);
+      document.exitPointerLock?.();
+    }
+    lastChatAction.current = actions.chat;
+  }, [actions.menu, actions.chat, toggleMenu, gameState, isMenuOpen]);
+
+  const handleCommand = (cmd: string) => {
+    const parts = cmd.trim().split(' ');
+    const base = parts[0].toLowerCase();
+    
+    if (base === '/time' && parts[1] === 'set') {
+      return `Time commands are not fully implemented yet.`;
+    }
+    if (base === '/tp') {
+      return `Teleported to ${parts[1]} ${parts[2]} ${parts[3]}`;
+    }
+    if (base === '/seed') {
+      return `Seed: ${seed}`;
+    }
+    if (base === '/help') {
+      return `Available commands: /seed, /time set <day|night>, /tp <x> <y> <z>`;
+    }
+    if (base.startsWith('/')) {
+      return `Error: Unknown command. Type /help for help.`;
+    }
+    return `[You]: ${cmd}`;
+  };
 
   const handleCreateWorld = (newSeed: number) => {
     // Request pointer lock synchronously on user click
@@ -99,6 +146,7 @@ function App() {
             showClouds={showClouds}
             seed={seed}
             isMenuOpen={isMenuOpen}
+            isConsoleOpen={isConsoleOpen}
             onWorldReady={() => setGameState('playing')}
             onStatusChange={handleStatusChange} 
           />
@@ -111,23 +159,38 @@ function App() {
           )}
 
           {gameState === 'playing' && (
-            <Hud 
-              isLocked={isLocked} 
-              fps={fps}
-              onBlockChange={setCurrentBlockType}
-              isMenuOpen={isMenuOpen}
-              targetFps={targetFps}
-              onFpsChange={setTargetFps}
-              renderDistance={renderDistance}
-              onRenderDistanceChange={setRenderDistance}
-              autoJump={autoJump}
-              onAutoJumpChange={setAutoJump}
-              fancyLeaves={fancyLeaves}
-              onFancyLeavesChange={setFancyLeaves}
-              showClouds={showClouds}
-              onShowCloudsChange={setShowClouds}
-              onMenuToggle={toggleMenu}
-            />
+            <>
+              <Hud 
+                isLocked={isLocked} 
+                fps={fps}
+                onBlockChange={setCurrentBlockType}
+                isMenuOpen={isMenuOpen}
+                targetFps={targetFps}
+                onFpsChange={setTargetFps}
+                renderDistance={renderDistance}
+                onRenderDistanceChange={setRenderDistance}
+                autoJump={autoJump}
+                onAutoJumpChange={setAutoJump}
+                fancyLeaves={fancyLeaves}
+                onFancyLeavesChange={setFancyLeaves}
+                showClouds={showClouds}
+                onShowCloudsChange={setShowClouds}
+                onMenuToggle={toggleMenu}
+              />
+              <Console 
+                isOpen={isConsoleOpen} 
+                onClose={() => {
+                  isConsoleOpenRef.current = false;
+                  justClosedConsoleRef.current = true;
+                  setTimeout(() => {
+                    justClosedConsoleRef.current = false;
+                  }, 200);
+                  setIsConsoleOpen(false);
+                  lockControls();
+                }} 
+                onCommand={handleCommand}
+              />
+            </>
           )}
         </>
       )}

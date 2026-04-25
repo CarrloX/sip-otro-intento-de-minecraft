@@ -12,11 +12,12 @@ interface GameCanvasProps {
   showClouds: boolean;
   seed: number;
   isMenuOpen: boolean;
+  isConsoleOpen?: boolean;
   onWorldReady: () => void;
   onStatusChange: (status: { isLocked: boolean; lockControls: () => void; fps: number }) => void;
 }
 
-const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fancyLeaves, showClouds, seed, isMenuOpen, onWorldReady, onStatusChange }: GameCanvasProps) => {
+const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fancyLeaves, showClouds, seed, isMenuOpen, isConsoleOpen = false, onWorldReady, onStatusChange }: GameCanvasProps) => {
   const { mountRef, isLocked, lockControls, fps, handleMobileLook, handleMobileInteract } = useMinecraft({
     currentBlockType,
     targetFps,
@@ -30,7 +31,7 @@ const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fan
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in globalThis));
+    setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (globalThis.window !== undefined && 'ontouchstart' in globalThis));
   }, []);
 
   useEffect(() => {
@@ -45,7 +46,7 @@ const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fan
         type="button"
         aria-label="Start Game"
         onClick={() => {
-          if (!isLocked && !isMobile) lockControls();
+          if (!isLocked && !isMobile && !isMenuOpen && !isConsoleOpen) lockControls();
         }}
       />
       {isMobile && !isMenuOpen && (

@@ -1,0 +1,95 @@
+.console-overlay {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  max-width: 600px;
+  min-width: 300px;
+  height: 50%;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 10px;
+  z-index: 1000;
+  pointer-events: none; /* Let clicks pass through to game when not clicking input */
+}
+
+.console-history {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+  pointer-events: auto;
+  max-height: calc(100% - 40px);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 8px;
+  border-radius: 4px;
+}
+
+/* Hide scrollbar for clean look */
+.console-history::-webkit-scrollbar {
+  width: 6px;
+}
+.console-history::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.console-message {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  text-shadow: 1px 1px 0 #000;
+  word-wrap: break-word;
+}
+
+.console-message.command {
+  color: #a0a0a0;
+}
+
+.console-message.response {
+  color: #ffffff;
+}
+
+.console-message.error {
+  color: #ff5555;
+}
+
+.console-input-container {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 6px 10px;
+  border-radius: 4px;
+  pointer-events: auto;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.console-prompt {
+  color: #ffffff;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.console-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  outline: none;
+}
+
+@media (max-width: 768px) {
+  .console-overlay {
+    width: 100%;
+    max-width: 100%;
+    padding: 5px;
+    height: 40%;
+  }
+}

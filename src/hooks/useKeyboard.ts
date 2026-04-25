@@ -32,6 +32,8 @@ const actionMap: Record<string, string> = {
   Escape: 'menu',
   ControlLeft: 'sprint',
   ControlRight: 'sprint',
+  KeyT: 'chat',
+  t: 'chat',
 };
 
 export const useKeyboard = () => {
@@ -50,6 +52,7 @@ export const useKeyboard = () => {
     sprint: false,
     down: false,
     isFlying: false,
+    chat: false,
   });
 
   const actionsRef = useRef(actions);
@@ -57,11 +60,18 @@ export const useKeyboard = () => {
   const lastSpaceRelease = useRef(0);
 
   useEffect(() => {
+    const isConsoleOpen = () => !!document.querySelector('.console-overlay');
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
-
+      
       const code = event.code;
       const action = actionMap[code] || actionMap[event.key.toLowerCase()];
+
+      // If the console is open, ignore all game bindings to prevent accidental actions
+      if (isConsoleOpen()) {
+        return;
+      }
       
       if (action) {
         const now = performance.now();

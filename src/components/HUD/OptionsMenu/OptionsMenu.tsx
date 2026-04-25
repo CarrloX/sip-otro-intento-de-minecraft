@@ -17,6 +17,16 @@ interface OptionsMenuProps {
 }
 
 const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, onClose }) => {
+  const [cooldown, setCooldown] = React.useState(false);
+
+  React.useEffect(() => {
+    if (isVisible) {
+      setCooldown(true);
+      const timer = setTimeout(() => setCooldown(false), 1250);
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible]);
+
   if (!isVisible) return null;
 
   return (
@@ -88,8 +98,13 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
           </div>
         </div>
 
-        <button className="back-button" onClick={onClose}>
-          BACK TO GAME
+        <button 
+          className="back-button" 
+          onClick={onClose}
+          disabled={cooldown}
+          style={{ opacity: cooldown ? 0.5 : 1, cursor: cooldown ? 'not-allowed' : 'pointer' }}
+        >
+          {cooldown ? 'PLEASE WAIT...' : 'BACK TO GAME'}
         </button>
       </div>
     </div>
