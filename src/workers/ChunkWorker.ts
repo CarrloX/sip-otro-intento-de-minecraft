@@ -1,6 +1,6 @@
 import { CHUNK_SIZE, Y_MIN, Y_MAX, CHUNK_VOLUME, getBlockIndex, noise, pseudoRandom, getTerrainType, setGlobalSeed } from '../services/WorldService';
 
-const ATLAS_COLS = 7;
+const ATLAS_COLS = 8;
 const getTexIndex = (blockType: number, face: string): number => {
   if (blockType === 1) { // Grass
     if (face === 'top') return 1;
@@ -14,6 +14,7 @@ const getTexIndex = (blockType: number, face: string): number => {
     return 3;
   }
   if (blockType === 5) return 5; // Leaves
+  if (blockType === 6) return 7; // Sand
   return 0;
 };
 
@@ -128,22 +129,63 @@ class ChunkBuilder {
       }
   }
 
-  private generateLeafBlock(hx: number, hy: number, hz: number, lx: number, lz: number, topY: number) {
-      const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
-      if (dist === 4 && hy === topY) return;
-      
+  private placePaddedLeaf(hx: number, hy: number, hz: number) {
       const idx = getPaddedIndex(hx, hy, hz);
       if (idx !== -1 && (this.paddedChunkData[idx] === 0 || this.paddedChunkData[idx] === 5)) {
           this.paddedChunkData[idx] = 5;
       }
   }
 
-  private generateTreeLeaves(lx: number, y: number, lz: number, height: number) {
-      const topY = y + height + 1;
-      for (let hx = lx - 2; hx <= lx + 2; hx++) {
-          for (let hz = lz - 2; hz <= lz + 2; hz++) {
-              for (let hy = y + height - 2; hy <= topY; hy++) {
-                  this.generateLeafBlock(hx, hy, hz, lx, lz, topY);
+  private generateTreeLeaves(gx: number, gz: number, lx: number, y: number, lz: number, height: number, shape: number) {
+      if (shape === 0) {
+          for (let hy = y + height - 3; hy <= y + height + 1; hy++) {
+              const dy = hy - (y + height);
+              let radius = dy <= -1 ? 2 : 1;
+              if (dy === 1) radius = 1;
+
+              for (let hx = lx - radius; hx <= lx + radius; hx++) {
+                  for (let hz = lz - radius; hz <= lz + radius; hz++) {
+                      const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
+                      const cornerSeed = pseudoRandom(hx * 1.1 + gx, hz * 1.2 + gz + hy);
+                      if (radius === 2 && dist === 4 && cornerSeed < 0.5) continue;
+                      if (dy === 1 && dist === 2) continue;
+
+                      this.placePaddedLeaf(hx, hy, hz);
+                  }
+              }
+          }
+      } else if (shape === 1) {
+          const leafStart = Math.max(1, Math.floor(height / 2));
+          for (let hy = y + leafStart; hy <= y + height + 1; hy++) {
+              const dy = (y + height + 1) - hy; 
+              const radius = (dy % 2 === 0) ? 1 : 2; 
+              
+              for (let hx = lx - radius; hx <= lx + radius; hx++) {
+                  for (let hz = lz - radius; hz <= lz + radius; hz++) {
+                      const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
+                      if (radius === 2 && dist >= 3) continue; 
+                      if (radius === 1 && dist >= 2) continue; 
+                      
+                      this.placePaddedLeaf(hx, hy, hz);
+                  }
+              }
+          }
+      } else {
+          const radius = 2.5;
+          const centerY = y + height - 1;
+          for (let hx = lx - 3; hx <= lx + 3; hx++) {
+              for (let hy = centerY - 3; hy <= centerY + 3; hy++) {
+                  for (let hz = lz - 3; hz <= lz + 3; hz++) {
+                      const dx = hx - lx;
+                      const dy = hy - centerY;
+                      const dz = hz - lz;
+                      const distSq = dx*dx + dy*dy + dz*dz;
+                      
+                      const edgeNoise = pseudoRandom(hx * 1.5, hz * 1.5 + hy) * 2;
+                      if (distSq < radius * radius + edgeNoise) {
+                          this.placePaddedLeaf(hx, hy, hz);
+                      }
+                  }
               }
           }
       }
@@ -166,10 +208,14 @@ class ChunkBuilder {
           if (pseudoRandom(gx, gz) < 0.02) {
             const surfaceY = noise(gx, gz);
             const y = surfaceY + 1;
-            const height = 4;
+            
+            const rand1 = pseudoRandom(gx * 1.3, gz * 1.7);
+            const rand2 = pseudoRandom(gx * 2.1, gz * 0.9);
+            const height = 4 + Math.floor(rand1 * 4);
+            const shape = Math.floor(rand2 * 3);
             
             this.generateTreeTrunk(lx, y, lz, height);
-            this.generateTreeLeaves(lx, y, lz, height);
+            this.generateTreeLeaves(gx, gz, lx, y, lz, height, shape);
           }
         }
       }

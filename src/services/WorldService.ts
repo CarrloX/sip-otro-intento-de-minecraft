@@ -194,7 +194,7 @@ const generateTrees = (
       
       if (pseudoRandom(gx, gz) < 0.02) {
         const surfaceY = noise(gx, gz);
-        generateTree(lx, surfaceY + 1, lz, chunkData);
+        generateTree(gx, gz, lx, surfaceY + 1, lz, chunkData);
       }
     }
   }
@@ -252,33 +252,27 @@ const placeLeaf = (hx: number, hy: number, hz: number, chunkData: Uint8Array) =>
   }
 };
 
-const generateLeaves = (
-  centerX: number,
-  centerY: number,
-  centerZ: number,
-  height: number,
-  chunkData: Uint8Array
-) => {
-  for (let hx = centerX - 2; hx <= centerX + 2; hx++) {
-    for (let hz = centerZ - 2; hz <= centerZ + 2; hz++) {
-      for (let hy = centerY + height - 2; hy <= centerY + height + 1; hy++) {
-        const dist = Math.abs(hx - centerX) + Math.abs(hz - centerZ);
-        const isCornerTop = dist === 4 && hy === centerY + height + 1;
-        if (isCornerTop) continue;
-        
-        placeLeaf(hx, hy, hz, chunkData);
-      }
-    }
-  }
-};
-
 export const generateTree = (
+  gx: number,
+  gz: number,
   lx: number,
   y: number,
   lz: number,
   chunkData: Uint8Array
 ) => {
-  const height = 4;
+  const rand1 = pseudoRandom(gx * 1.3, gz * 1.7);
+  const rand2 = pseudoRandom(gx * 2.1, gz * 0.9);
+  
+  // Height between 4 and 7
+  const height = 4 + Math.floor(rand1 * 4);
+  
+  // Choose tree shape based on rand2
+  // Shape 0: Standard oak (wider bottom, smaller top)
+  // Shape 1: Tall pine-like (narrow, starts lower)
+  // Shape 2: Bushy (short, wide leaves)
+  const shape = Math.floor(rand2 * 3);
+
+  // Generate Trunk
   for (let i = 0; i < height; i++) {
     const idx = getBlockIndex(lx, y + i, lz);
     if (idx !== -1) {
@@ -286,7 +280,62 @@ export const generateTree = (
     }
   }
   
-  generateLeaves(lx, y, lz, height, chunkData);
+  // Generate Leaves
+  if (shape === 0) {
+      // Standard Minecraft Oak
+      for (let hy = y + height - 3; hy <= y + height + 1; hy++) {
+          const dy = hy - (y + height);
+          let radius = dy <= -1 ? 2 : 1;
+          if (dy === 1) radius = 1;
+
+          for (let hx = lx - radius; hx <= lx + radius; hx++) {
+              for (let hz = lz - radius; hz <= lz + radius; hz++) {
+                  const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
+                  const cornerSeed = pseudoRandom(hx * 1.1 + gx, hz * 1.2 + gz + hy);
+                  if (radius === 2 && dist === 4 && cornerSeed < 0.5) continue;
+                  if (dy === 1 && dist === 2) continue;
+
+                  placeLeaf(hx, hy, hz, chunkData);
+              }
+          }
+      }
+  } else if (shape === 1) {
+      // Pine tree (tall and narrow)
+      const leafStart = Math.max(1, Math.floor(height / 2));
+      for (let hy = y + leafStart; hy <= y + height + 1; hy++) {
+          const dy = (y + height + 1) - hy; 
+          const radius = (dy % 2 === 0) ? 1 : 2; 
+          
+          for (let hx = lx - radius; hx <= lx + radius; hx++) {
+              for (let hz = lz - radius; hz <= lz + radius; hz++) {
+                  const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
+                  if (radius === 2 && dist >= 3) continue; 
+                  if (radius === 1 && dist >= 2) continue; 
+                  
+                  placeLeaf(hx, hy, hz, chunkData);
+              }
+          }
+      }
+  } else {
+      // Bushy tree (spherical)
+      const radius = 2.5;
+      const centerY = y + height - 1;
+      for (let hx = lx - 3; hx <= lx + 3; hx++) {
+          for (let hy = centerY - 3; hy <= centerY + 3; hy++) {
+              for (let hz = lz - 3; hz <= lz + 3; hz++) {
+                  const dx = hx - lx;
+                  const dy = hy - centerY;
+                  const dz = hz - lz;
+                  const distSq = dx*dx + dy*dy + dz*dz;
+                  
+                  const edgeNoise = pseudoRandom(hx * 1.5, hz * 1.5 + hy) * 2;
+                  if (distSq < radius * radius + edgeNoise) {
+                      placeLeaf(hx, hy, hz, chunkData);
+                  }
+              }
+          }
+      }
+  }
 };
 
 export const getGlobalBlockType = (

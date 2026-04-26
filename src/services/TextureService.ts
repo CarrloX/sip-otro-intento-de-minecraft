@@ -2,12 +2,12 @@ import * as THREE from 'three';
 
 export const generateAtlas = () => {
   const canvas = document.createElement('canvas');
-  canvas.width = 112; // 7 textures * 16px
+  canvas.width = 128; // 8 textures * 16px
   canvas.height = 16;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Failed to get 2D context');
 
-  const types = ['dirt', 'grass_top', 'stone', 'wood_side', 'wood_top', 'leaves', 'grass_side'];
+  const types = ['dirt', 'grass_top', 'stone', 'wood_side', 'wood_top', 'leaves', 'grass_side', 'sand'];
   
   types.forEach((type, index) => {
     const imageData = context.createImageData(16, 16);
@@ -20,7 +20,8 @@ export const generateAtlas = () => {
         'wood_side': { r: 106, g: 75, b: 53, v: 10 },
         'wood_top': { r: 160, g: 130, b: 90, v: 5 },
         'leaves': { r: 59, g: 122, b: 45, v: 20 },
-        'grass_side': { r: 121, g: 85, b: 58, v: 10 }
+        'grass_side': { r: 121, g: 85, b: 58, v: 10 },
+        'sand': { r: 219, g: 209, b: 160, v: 8 }
     };
     
     const { r: r_base, g: g_base, b: b_base, v: variance } = textureParams[type] || textureParams['dirt'];

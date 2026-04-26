@@ -18,15 +18,15 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
   const canJump = useRef(false);
   const isSprintingRef = useRef(false);
   const physicsAccumulator = useRef(0);
+  const eyeHeight = useRef(1.6);
 
   const checkCollision = useCallback((pos: THREE.Vector3) => {
     const PLAYER_WIDTH = 0.29;
-    const EYE_HEIGHT = 1.6;
     const HEAD_BUFFER = 0.2;
 
     const minX = Math.round(pos.x - PLAYER_WIDTH);
     const maxX = Math.round(pos.x + PLAYER_WIDTH);
-    const minY = Math.round(pos.y - EYE_HEIGHT);
+    const minY = Math.round(pos.y - eyeHeight.current);
     const maxY = Math.round(pos.y + HEAD_BUFFER);
     const minZ = Math.round(pos.z - PLAYER_WIDTH);
     const maxZ = Math.round(pos.z + PLAYER_WIDTH);
@@ -59,7 +59,32 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     }
   }, []);
 
-  const applyHorizontalForces = useCallback((isSprinting: boolean, isFlying: boolean) => {
+  const resolveCrouching = useCallback((actions: Record<string, boolean>, camera: THREE.PerspectiveCamera, isFlying: boolean) => {
+      const isCrouching = actions.down && !isFlying;
+      const targetEyeHeight = isCrouching ? 1.2 : 1.6;
+      
+      if (Math.abs(eyeHeight.current - targetEyeHeight) > 0.01) {
+          const diff = targetEyeHeight - eyeHeight.current;
+          const step = Math.sign(diff) * Math.min(Math.abs(diff), PHYSICS_STEP * 6);
+          
+          if (step > 0) {
+              const testPos = camera.position.clone();
+              testPos.y += step;
+              const oldEye = eyeHeight.current;
+              eyeHeight.current += step;
+              if (checkCollision(testPos)) {
+                  eyeHeight.current = oldEye;
+              } else {
+                  camera.position.y += step;
+              }
+          } else {
+              camera.position.y += step;
+              eyeHeight.current += step;
+          }
+      }
+  }, [checkCollision]);
+
+  const applyHorizontalForces = useCallback((isSprinting: boolean, isFlying: boolean, isCrouching: boolean) => {
     velocity.current.x -= velocity.current.x * 10 * PHYSICS_STEP;
     velocity.current.z -= velocity.current.z * 10 * PHYSICS_STEP;
 
@@ -74,7 +99,7 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
       baseSpeed = 60;
       multiplier = isSprinting ? 3 : 1;
     } else {
-      multiplier = isSprinting ? 1.3 : 1;
+      multiplier = isSprinting ? 1.3 : (isCrouching ? 0.35 : 1);
     }
 
     const speed = baseSpeed * multiplier;
@@ -93,7 +118,7 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     }
   }, [checkCollision]);
 
-  const resolveHorizontalCollision = useCallback((camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
+  const resolveHorizontalCollision = useCallback((camera: THREE.PerspectiveCamera, controls: PointerLockControls, isCrouching: boolean) => {
     const moveX = -velocity.current.x * PHYSICS_STEP;
     const moveZ = -velocity.current.z * PHYSICS_STEP;
     
@@ -118,6 +143,13 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     if (checkCollision(camera.position)) {
       camera.position.x = originalPos.x;
       collidedX = true;
+    } else if (isCrouching && canJump.current) {
+      const testPos = camera.position.clone();
+      testPos.y -= 0.2;
+      if (!checkCollision(testPos)) {
+         camera.position.x = originalPos.x;
+         collidedX = true;
+      }
     }
 
     // Mover y probar en el eje Z global independientemente
@@ -126,10 +158,17 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     if (checkCollision(camera.position)) {
       camera.position.z = originalPos.z;
       collidedZ = true;
+    } else if (isCrouching && canJump.current) {
+      const testPos = camera.position.clone();
+      testPos.y -= 0.2;
+      if (!checkCollision(testPos)) {
+         camera.position.z = originalPos.z;
+         collidedZ = true;
+      }
     }
 
     // Lógica de Salto Automático
-    if ((collidedX || collidedZ) && autoJumpEnabledRef?.current && moveForward.current && canJump.current) {
+    if ((collidedX || collidedZ) && autoJumpEnabledRef?.current && moveForward.current && canJump.current && !isCrouching) {
         const testPos = camera.position.clone();
         // Intentar ver si moviéndonos en la dirección bloqueada y subiendo, hay espacio libre
         if (collidedX) testPos.x += deltaX;
@@ -149,14 +188,16 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
    * Cognitive Complexity now reduced below threshold
    */
   const applyPhysicsStep = useCallback((actions: Record<string, boolean>, camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
-    const isSprinting = actions.sprint && moveForward.current;
     const isFlying = actions.isFlying;
+    const isCrouching = actions.down && !isFlying;
+    const isSprinting = actions.sprint && moveForward.current && !isCrouching;
 
+    resolveCrouching(actions, camera, isFlying);
     applyVerticalForces(actions, isSprinting, isFlying);
-    applyHorizontalForces(isSprinting, isFlying);
+    applyHorizontalForces(isSprinting, isFlying, isCrouching);
     resolveVerticalCollision(camera);
-    resolveHorizontalCollision(camera, controls);
-  }, [applyVerticalForces, applyHorizontalForces, resolveVerticalCollision, resolveHorizontalCollision]);
+    resolveHorizontalCollision(camera, controls, isCrouching);
+  }, [applyVerticalForces, applyHorizontalForces, resolveVerticalCollision, resolveHorizontalCollision, resolveCrouching]);
 
   const update = useCallback((delta: number, camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
     if (!controls.isLocked) return;
@@ -167,7 +208,7 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     moveBackward.current = actions.moveBackward;
     moveLeft.current = actions.moveLeft;
     moveRight.current = actions.moveRight;
-    isSprintingRef.current = actions.sprint && actions.moveForward;
+    isSprintingRef.current = actions.sprint && actions.moveForward && !(actions.down && !actions.isFlying);
 
     // Sub-stepping simulation
     physicsAccumulator.current += delta;
