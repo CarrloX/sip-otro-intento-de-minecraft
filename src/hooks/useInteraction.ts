@@ -42,7 +42,8 @@ export const useInteraction = (
   addBlockFn: (x: number, y: number, z: number, type: number) => void,
   removeBlockFn: (x: number, y: number, z: number) => void,
   currentBlockTypeRef: React.RefObject<number>,
-  hoveredBlockRef: React.RefObject<SelectionResult | null>
+  hoveredBlockRef: React.RefObject<SelectionResult | null>,
+  _worldId: string
 ) => {
   const handleMouseDown = useCallback((event: MouseEvent) => {
     if (!controlsRef.current?.isLocked || !cameraRef.current || !hoveredBlockRef.current) return;

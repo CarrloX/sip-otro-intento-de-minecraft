@@ -5,13 +5,14 @@ import GameCanvas from './components/GameCanvas/GameCanvas';
 import Hud from './components/HUD/HUD';
 import StartScreen from './components/StartScreen/StartScreen';
 import Console from './components/Console/Console';
-import { initDB, clearDB } from './services/StorageService';
+import { initDB, createWorld, updateWorldLastPlayed } from './services/StorageService';
 import { commandService } from './services/CommandService';
 
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (globalThis.window !== undefined && 'ontouchstart' in globalThis);
 
 function App() {
   const [gameState, setGameState] = useState<'start' | 'loading' | 'playing'>('start');
+  const [currentWorldId, setCurrentWorldId] = useState<string | null>(null);
   const [seed, setSeed] = useState<number>(0);
   const [currentBlockType, setCurrentBlockType] = useState(1);
   const [isLocked, setIsLocked] = useState(false);
@@ -26,6 +27,12 @@ function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(true); // Start with menu open
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [lockControls, setLockControls] = useState<() => void>(() => () => {});
+  const [initialPosition, setInitialPosition] = useState<{x: number, y: number, z: number} | undefined>(undefined);
+  const [initialRotation, setInitialRotation] = useState<{x: number, y: number} | undefined>(undefined);
+  const [initialWorldTime, setInitialWorldTime] = useState<number | undefined>(undefined);
+  const currentPositionRef = useRef<{x: number, y: number, z: number} | undefined>(undefined);
+  const currentRotationRef = useRef<{x: number, y: number} | undefined>(undefined);
+  const currentWorldTimeRef = useRef<number | undefined>(undefined);
 
   const { actions } = useKeyboard();
 
@@ -35,10 +42,19 @@ function App() {
 
   const justClosedConsoleRef = useRef(false);
 
-  const handleStatusChange = useCallback((status: { isLocked: boolean; lockControls: () => void; fps: number }) => {
+  const handleStatusChange = useCallback((status: { isLocked: boolean; lockControls: () => void; fps: number; position?: {x: number, y: number, z: number}; rotation?: {x: number, y: number}; worldTime?: number }) => {
     setIsLocked(status.isLocked);
     setLockControls(() => status.lockControls);
     setFps(status.fps);
+    if (status.position) {
+        currentPositionRef.current = status.position;
+    }
+    if (status.rotation) {
+        currentRotationRef.current = status.rotation;
+    }
+    if (status.worldTime !== undefined) {
+        currentWorldTimeRef.current = status.worldTime;
+    }
     
     // Auto-open menu if game transitions from locked to unlocked (e.g. via ESC key)
     if (!status.isLocked && wasLockedRef.current) {
@@ -97,30 +113,90 @@ function App() {
     };
   }, [seed]);
 
-  const handleCreateWorld = (newSeed: number) => {
-    // Request pointer lock synchronously on user click
-    document.body.requestPointerLock?.();
+  const handleCreateWorld = async (name: string, newSeed: number) => {
+    if (!document.pointerLockElement) {
+        try {
+            document.body.requestPointerLock();
+        } catch (e) {
+            console.warn("Initial pointer lock request failed", e);
+        }
+    }
     
-    setIsMenuOpen(false);
-    
-    // Run async DB clear and state update
-    (async () => {
-      try {
-        const db = await initDB();
-        await clearDB(db);
-      } catch (e) {
-        console.error("Failed to clear DB on new world creation", e);
-      }
-      
-      setSeed(newSeed);
-      setGameState('loading');
-    })();
+    // Give the browser a small "cooldown" to process the lock before we change state
+    setTimeout(async () => {
+        try {
+          const db = await initDB();
+          const newWorld = await createWorld(db, name, newSeed);
+          
+          setCurrentWorldId(newWorld.id);
+          setSeed(newWorld.seed);
+          setInitialPosition(undefined);
+          setInitialRotation(undefined);
+          setInitialWorldTime(undefined);
+          currentPositionRef.current = undefined;
+          currentRotationRef.current = undefined;
+          currentWorldTimeRef.current = undefined;
+          setGameState('loading');
+          setIsMenuOpen(false);
+        } catch (e) {
+          console.error("Failed to create world", e);
+        }
+    }, 100);
   };
+
+  const handleSelectWorld = async (worldId: string, worldSeed: number, playerPosition?: {x: number, y: number, z: number}, playerRotation?: {x: number, y: number}, worldTime?: number) => {
+    if (!document.pointerLockElement) {
+        try {
+            document.body.requestPointerLock();
+        } catch (e) {
+            console.warn("Initial pointer lock request failed", e);
+        }
+    }
+
+    // Give the browser a small "cooldown" to process the lock before we change state
+    setTimeout(() => {
+        setCurrentWorldId(worldId);
+        setSeed(worldSeed);
+        setInitialPosition(playerPosition);
+        setInitialRotation(playerRotation);
+        setInitialWorldTime(worldTime);
+        currentPositionRef.current = playerPosition;
+        currentRotationRef.current = playerRotation;
+        currentWorldTimeRef.current = worldTime;
+        setGameState('loading');
+        setIsMenuOpen(false);
+        
+        // Update last played timestamp
+        initDB().then(db => {
+            updateWorldLastPlayed(db, worldId, playerPosition, playerRotation, worldTime).catch(console.error);
+        });
+    }, 100);
+  };
+
+  const handleQuitToTitle = useCallback(() => {
+    // Save position, rotation and worldTime before quitting
+    if (currentWorldId && (currentPositionRef.current || currentRotationRef.current || currentWorldTimeRef.current !== undefined)) {
+        initDB().then(db => {
+            updateWorldLastPlayed(db, currentWorldId, currentPositionRef.current, currentRotationRef.current, currentWorldTimeRef.current).catch(console.error);
+        });
+    }
+
+    document.exitPointerLock?.();
+    setGameState('start');
+    setCurrentWorldId(null);
+    setInitialPosition(undefined);
+    setInitialRotation(undefined);
+    setInitialWorldTime(undefined);
+    setIsMenuOpen(true);
+  }, [currentWorldId]);
 
   return (
     <div className="app-container">
       {gameState === 'start' && (
-        <StartScreen onCreateWorld={handleCreateWorld} />
+        <StartScreen 
+            onCreateWorld={handleCreateWorld} 
+            onSelectWorld={handleSelectWorld}
+        />
       )}
 
       {(gameState === 'loading' || gameState === 'playing') && (
@@ -135,6 +211,10 @@ function App() {
             enableShadows={enableShadows}
             brightness={brightness}
             seed={seed}
+            worldId={currentWorldId || 'default'}
+            initialPosition={initialPosition}
+            initialRotation={initialRotation}
+            initialWorldTime={initialWorldTime}
             isMenuOpen={isMenuOpen}
             isConsoleOpen={isConsoleOpen}
             onWorldReady={() => setGameState('playing')}
@@ -170,6 +250,7 @@ function App() {
                 brightness={brightness}
                 onBrightnessChange={setBrightness}
                 onMenuToggle={toggleMenu}
+                onQuitToTitle={handleQuitToTitle}
               />
               <Console 
                 isOpen={isConsoleOpen} 

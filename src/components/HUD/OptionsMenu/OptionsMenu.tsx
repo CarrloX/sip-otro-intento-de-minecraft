@@ -18,9 +18,10 @@ interface OptionsMenuProps {
   brightness: number;
   onBrightnessChange: (brightness: number) => void;
   onClose: () => void;
+  onQuitToTitle: () => void;
 }
 
-const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, enableShadows, onEnableShadowsChange, brightness, onBrightnessChange, onClose }) => {
+const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, enableShadows, onEnableShadowsChange, brightness, onBrightnessChange, onClose, onQuitToTitle }) => {
   const [cooldown, setCooldown] = React.useState(false);
 
   React.useEffect(() => {
@@ -133,6 +134,13 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
           disabled={cooldown}
         >
           {cooldown ? 'PLEASE WAIT...' : 'BACK TO GAME'}
+        </button>
+
+        <button 
+          className="quit-button" 
+          onClick={onQuitToTitle}
+        >
+          SAVE & QUIT TO TITLE
         </button>
       </div>
     </div>

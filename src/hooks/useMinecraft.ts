@@ -57,6 +57,10 @@ export interface MinecraftOptions {
   enableShadows?: boolean;
   brightness?: number;
   seed?: number;
+  worldId: string;
+  initialPosition?: { x: number; y: number; z: number };
+  initialRotation?: { x: number; y: number };
+  initialWorldTime?: number;
   onWorldReady?: () => void;
 }
 
@@ -70,13 +74,21 @@ export const useMinecraft = ({
   enableShadows = true,
   brightness = 50,
   seed = 0,
+  worldId,
+  initialPosition,
+  initialRotation,
+  initialWorldTime,
   onWorldReady
 }: MinecraftOptions) => {
   const mountRef = useRef<HTMLButtonElement>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
+  const [cameraPosition, setCameraPosition] = useState<{x: number, y: number, z: number} | undefined>(initialPosition);
+  const [cameraRotation, setCameraRotation] = useState<{x: number, y: number} | undefined>(initialRotation);
+  const [currentWorldTime, setCurrentWorldTime] = useState<number>(initialWorldTime ?? Math.PI / 4);
   const frameCount = useRef(0);
   const lastFpsUpdate = useRef<number>(0);
+  const lastPositionUpdate = useRef<number>(0);
   
   const currentBlockTypeRef = useRef(currentBlockType);
   const targetFpsRef = useRef(targetFps);
@@ -151,33 +163,42 @@ export const useMinecraft = ({
   const isWorldReadyRef = useRef(false);
   const handleWorldReady = useCallback((chunksData: Map<string, Uint8Array>) => {
     if (!isWorldReadyRef.current && cameraRef.current) {
-        const px = Math.floor(cameraRef.current.position.x);
-        const pz = Math.floor(cameraRef.current.position.z);
-        
-        let safeY = 30; // Default fallback
-        
-        // Find the highest solid block that has at least 2 blocks of air above it
-        for (let y = Y_MAX - 2; y >= Y_MIN; y--) {
-            const block = getGlobalBlockType(px, y, pz, chunksData);
-            if (block !== 0) { // Found a solid block
-                const above1 = getGlobalBlockType(px, y + 1, pz, chunksData);
-                const above2 = getGlobalBlockType(px, y + 2, pz, chunksData);
-                
-                // If there's enough head room (at least 2 blocks of air)
-                if (above1 === 0 && above2 === 0) {
-                    safeY = y + 2.2;
-                    break;
-                }
-            }
+        if (initialPosition) {
+            cameraRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+        }
+        if (initialRotation) {
+            cameraRef.current.rotation.set(initialRotation.x, initialRotation.y, 0, 'YXZ');
         }
         
-        cameraRef.current.position.y = safeY;
+        if (!initialPosition) {
+            const px = Math.floor(cameraRef.current.position.x);
+            const pz = Math.floor(cameraRef.current.position.z);
+            
+            let safeY = 30; // Default fallback
+            
+            // Find the highest solid block that has at least 2 blocks of air above it
+            for (let y = Y_MAX - 2; y >= Y_MIN; y--) {
+                const block = getGlobalBlockType(px, y, pz, chunksData);
+                if (block !== 0) { // Found a solid block
+                    const above1 = getGlobalBlockType(px, y + 1, pz, chunksData);
+                    const above2 = getGlobalBlockType(px, y + 2, pz, chunksData);
+                    
+                    // If there's enough head room (at least 2 blocks of air)
+                    if (above1 === 0 && above2 === 0) {
+                        safeY = y + 2.2;
+                        break;
+                    }
+                }
+            }
+            
+            cameraRef.current.position.y = safeY;
+        }
     }
     isWorldReadyRef.current = true;
     onWorldReady?.();
-  }, [onWorldReady]);
+  }, [onWorldReady, initialPosition]);
 
-  const world = useWorld(sceneRef, materialsRef, blockGeometryRef, renderDistanceRef, fancyLeavesRef, seedRef, handleWorldReady);
+  const world = useWorld(sceneRef, materialsRef, blockGeometryRef, renderDistanceRef, fancyLeavesRef, seedRef, worldId, handleWorldReady);
 
   const autoJumpRef = useRef(autoJump);
   useEffect(() => {
@@ -193,7 +214,8 @@ export const useMinecraft = ({
     world.addBlock,
     world.removeBlock,
     currentBlockTypeRef,
-    hoveredBlockRef
+    hoveredBlockRef,
+    worldId
   );
 
   const lockControls = useCallback(() => {
@@ -211,13 +233,25 @@ export const useMinecraft = ({
     lightingSystem.cloudGroup.visible = showClouds;
     lightingSystemRef.current = lightingSystem;
     sceneRef.current = scene;
-    let worldTime = Math.PI / 4; // Start at Morning (+0.78 rad)
+    let worldTime = initialWorldTime ?? Math.PI / 4; // Start at Morning (+0.78 rad)
     const TIME_SPEED = 0.005; // Velocidad del ciclo de día (aprox. 20 min por ciclo)
 
     // 2. Init Camera
     const initialFar = Math.max(512, renderDistanceRef.current * 16 * 2);
     const camera = new THREE.PerspectiveCamera(75, globalThis.innerWidth / globalThis.innerHeight, 0.1, initialFar);
-    camera.position.y = 30;
+    
+    // Set initial position immediately if available
+    if (initialPosition) {
+        camera.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+    } else {
+        camera.position.set(0, 30, 0);
+    }
+
+    // Set initial rotation immediately if available
+    if (initialRotation) {
+        camera.rotation.set(initialRotation.x, initialRotation.y, 0, 'YXZ');
+    }
+    
     cameraRef.current = camera;
 
     // 3. Init Renderer
@@ -242,7 +276,7 @@ export const useMinecraft = ({
     controls.addEventListener('unlock', onUnlock);
 
     // If pointer is already locked (e.g. from StartScreen click), sync state
-    if (document.pointerLockElement === document.body || document.pointerLockElement === renderer.domElement) {
+    if (document.pointerLockElement) {
       controls.isLocked = true;
       setIsLocked(true);
     }
@@ -312,6 +346,20 @@ export const useMinecraft = ({
         setFps(Math.round((frameCount.current * 1000) / (time - lastFpsUpdate.current)));
         frameCount.current = 0;
         lastFpsUpdate.current = time;
+        
+        // Sync position for saving (1s interval)
+        if (camera) {
+            setCameraPosition({
+                x: camera.position.x,
+                y: camera.position.y,
+                z: camera.position.z
+            });
+            setCameraRotation({
+                x: camera.rotation.x,
+                y: camera.rotation.y
+            });
+            setCurrentWorldTime(worldTime);
+        }
       }
 
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in globalThis);
@@ -394,5 +442,5 @@ export const useMinecraft = ({
 
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in globalThis);
 
-  return { mountRef, isLocked: isLocked || isMobile, lockControls, fps, handleMobileLook, handleMobileInteract };
+  return { mountRef, isLocked: isLocked || isMobile, lockControls, fps, cameraPosition, cameraRotation, currentWorldTime, handleMobileLook, handleMobileInteract };
 };

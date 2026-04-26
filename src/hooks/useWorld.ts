@@ -11,10 +11,12 @@ export const useWorld = (
   renderDistanceRef: React.RefObject<number>,
   fancyLeavesRef: React.RefObject<boolean>,
   seedRef: React.RefObject<number>,
+  worldId: string,
   onWorldReady?: (chunksData: Map<string, Uint8Array>) => void
 ) => {
   const objectsRef = useRef<THREE.Object3D[]>([]);
   const isReadyRef = useRef(false);
+  const isStorageLoadingRef = useRef(true);
   const onWorldReadyRef = useRef(onWorldReady);
   
   useEffect(() => {
@@ -46,7 +48,22 @@ export const useWorld = (
       try {
         const db = await initDB();
         dbRef.current = db;
-        const savedData = await loadAllBlocks(db);
+        
+        // Clear current world data before loading new world
+        worldDataRef.current.clear();
+        chunksDataRef.current.clear();
+        chunkCacheRef.current.clear();
+        loadedChunksRef.current.clear();
+        chunkMeshesRef.current.forEach(group => {
+            sceneRef.current?.remove(group);
+            group.children.forEach(child => {
+                if (child instanceof THREE.Mesh) child.geometry.dispose();
+            });
+        });
+        chunkMeshesRef.current.clear();
+        playerChunkRef.current = { x: Infinity, z: Infinity };
+
+        const savedData = await loadAllBlocks(db, worldId);
         savedData.forEach((type, key) => {
            const [x, , z] = key.split(',').map(Number);
            const cid = getChunkId(x, z);
@@ -57,14 +74,16 @@ export const useWorld = (
            }
            modMap.set(key, type);
         });
-        console.log(`Loaded ${savedData.size} blocks from storage.`);
-        if (sceneRef.current) {
-            playerChunkRef.current = { x: Infinity, z: Infinity };
-        }
+        
+        console.log(`Loaded ${savedData.size} blocks for world ${worldId}.`);
+        isReadyRef.current = false;
+        isStorageLoadingRef.current = false;
       } catch (err) {
         console.error("Failed to load world from storage:", err);
+        isStorageLoadingRef.current = false;
       }
     };
+    isStorageLoadingRef.current = true;
     setup();
 
     if (workersRef.current.length === 0) {
@@ -82,7 +101,7 @@ export const useWorld = (
         workersRef.current.push(worker);
       }
     }
-  }, []);
+  }, [worldId, sceneRef]);
 
   const getAvailableWorker = () => {
     if (workersRef.current.length === 0) return null;
@@ -233,7 +252,7 @@ export const useWorld = (
     }
 
     if (dbRef.current) {
-        saveBlock(dbRef.current, key, type).catch(console.error);
+        saveBlock(dbRef.current, worldId, key, type).catch(console.error);
     }
 
     const chunkMesh = chunkMeshesRef.current.get(chunkId);
@@ -329,7 +348,7 @@ export const useWorld = (
     }
 
     if (dbRef.current) {
-        saveBlock(dbRef.current, key, 0).catch(console.error);
+        saveBlock(dbRef.current, worldId, key, 0).catch(console.error);
     }
 
     const chunkMesh = chunkMeshesRef.current.get(chunkId);
@@ -459,6 +478,8 @@ export const useWorld = (
   }, [requestChunkMesh]);
 
   const manageChunks = useCallback((cameraPosition: THREE.Vector3) => {
+    if (isStorageLoadingRef.current) return;
+    
     const RENDER_DISTANCE = renderDistanceRef.current; 
     const px = Math.floor(cameraPosition.x / CHUNK_SIZE);
     const pz = Math.floor(cameraPosition.z / CHUNK_SIZE);

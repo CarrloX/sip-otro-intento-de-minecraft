@@ -23,9 +23,10 @@ interface HudProps {
   brightness: number;
   onBrightnessChange: (brightness: number) => void;
   onMenuToggle: () => void;
+  onQuitToTitle: () => void;
 }
 
-const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, enableShadows, onEnableShadowsChange, brightness, onBrightnessChange, onMenuToggle }: HudProps) => {
+const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, enableShadows, onEnableShadowsChange, brightness, onBrightnessChange, onMenuToggle, onQuitToTitle }: HudProps) => {
   return (
     <div id="ui-layer">
       <div className="debug-info">
@@ -57,6 +58,7 @@ const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange,
         brightness={brightness}
         onBrightnessChange={onBrightnessChange}
         onClose={onMenuToggle}
+        onQuitToTitle={onQuitToTitle}
       />
     </div>
   );
