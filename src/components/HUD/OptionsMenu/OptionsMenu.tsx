@@ -13,10 +13,14 @@ interface OptionsMenuProps {
   onFancyLeavesChange: (fancyLeaves: boolean) => void;
   showClouds: boolean;
   onShowCloudsChange: (showClouds: boolean) => void;
+  enableShadows: boolean;
+  onEnableShadowsChange: (enableShadows: boolean) => void;
+  brightness: number;
+  onBrightnessChange: (brightness: number) => void;
   onClose: () => void;
 }
 
-const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, onClose }) => {
+const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, enableShadows, onEnableShadowsChange, brightness, onBrightnessChange, onClose }) => {
   const [cooldown, setCooldown] = React.useState(false);
 
   React.useEffect(() => {
@@ -63,6 +67,20 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               title="Ajustar distancia de chunks"
             />
           </div>
+          <div className="option-row">
+            <span className="option-label">Brightness: {brightness}%</span>
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              step="1" 
+              value={brightness} 
+              onChange={(e) => onBrightnessChange(Number(e.target.value))}
+              className="option-slider"
+              aria-label="Brightness"
+              title="Ajustar brillo del juego"
+            />
+          </div>
           <div className="option-row horizontal">
             <span className="option-label">Auto Jump</span>
             <input 
@@ -96,13 +114,23 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               title="Activar o desactivar nubes 3D"
             />
           </div>
+          <div className="option-row horizontal spaced">
+            <span className="option-label">Shadows</span>
+            <input 
+              type="checkbox" 
+              checked={enableShadows} 
+              onChange={(e) => onEnableShadowsChange(e.target.checked)}
+              className="option-checkbox"
+              aria-label="Shadows"
+              title="Activar o desactivar las sombras"
+            />
+          </div>
         </div>
 
         <button 
           className="back-button" 
           onClick={onClose}
           disabled={cooldown}
-          style={{ opacity: cooldown ? 0.5 : 1, cursor: cooldown ? 'not-allowed' : 'pointer' }}
         >
           {cooldown ? 'PLEASE WAIT...' : 'BACK TO GAME'}
         </button>

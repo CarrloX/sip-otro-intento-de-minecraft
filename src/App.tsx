@@ -6,6 +6,7 @@ import Hud from './components/HUD/HUD';
 import StartScreen from './components/StartScreen/StartScreen';
 import Console from './components/Console/Console';
 import { initDB, clearDB } from './services/StorageService';
+import { commandService } from './services/CommandService';
 
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (globalThis.window !== undefined && 'ontouchstart' in globalThis);
 
@@ -20,6 +21,8 @@ function App() {
   const [autoJump, setAutoJump] = useState(true);
   const [fancyLeaves, setFancyLeaves] = useState(!isMobile);
   const [showClouds, setShowClouds] = useState(true);
+  const [enableShadows, setEnableShadows] = useState(true);
+  const [brightness, setBrightness] = useState(50);
   const [isMenuOpen, setIsMenuOpen] = useState(true); // Start with menu open
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [lockControls, setLockControls] = useState<() => void>(() => () => {});
@@ -87,27 +90,12 @@ function App() {
     lastChatAction.current = actions.chat;
   }, [actions.menu, actions.chat, toggleMenu, gameState, isMenuOpen]);
 
-  const handleCommand = (cmd: string) => {
-    const parts = cmd.trim().split(' ');
-    const base = parts[0].toLowerCase();
-    
-    if (base === '/time' && parts[1] === 'set') {
-      return `Time commands are not fully implemented yet.`;
-    }
-    if (base === '/tp') {
-      return `Teleported to ${parts[1]} ${parts[2]} ${parts[3]}`;
-    }
-    if (base === '/seed') {
-      return `Seed: ${seed}`;
-    }
-    if (base === '/help') {
-      return `Available commands: /seed, /time set <day|night>, /tp <x> <y> <z>`;
-    }
-    if (base.startsWith('/')) {
-      return `Error: Unknown command. Type /help for help.`;
-    }
-    return `[You]: ${cmd}`;
-  };
+  useEffect(() => {
+    commandService.register('/seed', () => `Seed: ${seed}`);
+    return () => {
+      commandService.unregister('/seed');
+    };
+  }, [seed]);
 
   const handleCreateWorld = (newSeed: number) => {
     // Request pointer lock synchronously on user click
@@ -144,6 +132,8 @@ function App() {
             autoJump={autoJump}
             fancyLeaves={fancyLeaves}
             showClouds={showClouds}
+            enableShadows={enableShadows}
+            brightness={brightness}
             seed={seed}
             isMenuOpen={isMenuOpen}
             isConsoleOpen={isConsoleOpen}
@@ -175,6 +165,10 @@ function App() {
                 onFancyLeavesChange={setFancyLeaves}
                 showClouds={showClouds}
                 onShowCloudsChange={setShowClouds}
+                enableShadows={enableShadows}
+                onEnableShadowsChange={setEnableShadows}
+                brightness={brightness}
+                onBrightnessChange={setBrightness}
                 onMenuToggle={toggleMenu}
               />
               <Console 
@@ -188,7 +182,7 @@ function App() {
                   setIsConsoleOpen(false);
                   lockControls();
                 }} 
-                onCommand={handleCommand}
+                onCommand={(cmd) => commandService.execute(cmd)}
               />
             </>
           )}

@@ -37,63 +37,91 @@ const Console: React.FC<ConsoleProps> = ({ isOpen, onClose, onCommand }) => {
     }
   }, [history]);
 
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      window.addEventListener('keydown', handleGlobalKeyDown);
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   const addMessage = (text: string, type: 'command' | 'response' | 'error') => {
     setHistory((prev) => [...prev, { id: Date.now() + Math.random(), text, type }]);
+  };
+
+  const handleEnter = () => {
+    const trimmedInput = input.trim();
+    if (!trimmedInput) {
+      onClose();
+      return;
+    }
+
+    addMessage(`> ${trimmedInput}`, 'command');
+    const response = onCommand(trimmedInput);
+    
+    if (response) {
+      const isError = response.toLowerCase().startsWith('error');
+      addMessage(response, isError ? 'error' : 'response');
+    }
+    
+    setInput('');
+    setHistoryIndex(-1);
+  };
+
+  const handleArrowUp = () => {
+    const commands = history.filter(m => m.type === 'command');
+    if (commands.length === 0) return;
+
+    const newIndex = historyIndex < commands.length - 1 ? historyIndex + 1 : historyIndex;
+    setHistoryIndex(newIndex);
+    setInput(commands[commands.length - 1 - newIndex].text.replace(/^> /, ''));
+  };
+
+  const handleArrowDown = () => {
+    const commands = history.filter(m => m.type === 'command');
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setInput(commands[commands.length - 1 - newIndex].text.replace(/^> /, ''));
+    } else if (historyIndex === 0) {
+      setHistoryIndex(-1);
+      setInput('');
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     e.nativeEvent.stopImmediatePropagation();
     e.stopPropagation();
     
-    if (e.key === 'Escape') {
-      onClose();
-      return;
-    }
-
-    if (e.key === 'Enter') {
-      if (input.trim()) {
-        const cmd = input.trim();
-        addMessage(`> ${cmd}`, 'command');
-        
-        const response = onCommand(cmd);
-        if (response) {
-          addMessage(response, response.toLowerCase().startsWith('error') ? 'error' : 'response');
-        }
-        
-        setInput('');
-        setHistoryIndex(-1);
-      } else {
-        onClose(); // Close if empty enter
-      }
-      return;
-    }
-
-    // Command history navigation
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      const commands = history.filter(m => m.type === 'command');
-      if (commands.length > 0) {
-        const newIndex = historyIndex < commands.length - 1 ? historyIndex + 1 : historyIndex;
-        setHistoryIndex(newIndex);
-        setInput(commands[commands.length - 1 - newIndex].text.replace(/^> /, ''));
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      const commands = history.filter(m => m.type === 'command');
-      if (historyIndex > 0) {
-        const newIndex = historyIndex - 1;
-        setHistoryIndex(newIndex);
-        setInput(commands[commands.length - 1 - newIndex].text.replace(/^> /, ''));
-      } else if (historyIndex === 0) {
-        setHistoryIndex(-1);
-        setInput('');
-      }
+    switch (e.key) {
+      case 'Escape':
+        onClose();
+        break;
+      case 'Enter':
+        handleEnter();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        handleArrowUp();
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        handleArrowDown();
+        break;
+      default:
+        break;
     }
   };
 
   if (!isOpen) {
-    // We can still render the recent history even if closed, like Minecraft chat
-    // But for simplicity, we hide it or show just a few lines.
     return null;
   }
 
@@ -118,6 +146,8 @@ const Console: React.FC<ConsoleProps> = ({ isOpen, onClose, onCommand }) => {
           onKeyDown={handleKeyDown}
           autoComplete="off"
           spellCheck="false"
+          placeholder="Type a command..."
+          aria-label="Console command input"
         />
       </div>
     </div>

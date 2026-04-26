@@ -10,6 +10,8 @@ interface GameCanvasProps {
   autoJump: boolean;
   fancyLeaves: boolean;
   showClouds: boolean;
+  enableShadows: boolean;
+  brightness: number;
   seed: number;
   isMenuOpen: boolean;
   isConsoleOpen?: boolean;
@@ -17,7 +19,7 @@ interface GameCanvasProps {
   onStatusChange: (status: { isLocked: boolean; lockControls: () => void; fps: number }) => void;
 }
 
-const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fancyLeaves, showClouds, seed, isMenuOpen, isConsoleOpen = false, onWorldReady, onStatusChange }: GameCanvasProps) => {
+const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fancyLeaves, showClouds, enableShadows, brightness, seed, isMenuOpen, isConsoleOpen = false, onWorldReady, onStatusChange }: GameCanvasProps) => {
   const { mountRef, isLocked, lockControls, fps, handleMobileLook, handleMobileInteract } = useMinecraft({
     currentBlockType,
     targetFps,
@@ -25,6 +27,8 @@ const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fan
     autoJump,
     fancyLeaves,
     showClouds,
+    enableShadows,
+    brightness,
     seed,
     onWorldReady
   });

@@ -1,11 +1,11 @@
 import { CHUNK_SIZE, Y_MIN, Y_MAX, CHUNK_VOLUME, getBlockIndex, noise, pseudoRandom, getTerrainType, setGlobalSeed } from '../services/WorldService';
 
-const ATLAS_COLS = 6;
+const ATLAS_COLS = 7;
 const getTexIndex = (blockType: number, face: string): number => {
   if (blockType === 1) { // Grass
     if (face === 'top') return 1;
     if (face === 'bottom') return 0;
-    return 0; // Sides
+    return 6; // Sides
   }
   if (blockType === 2) return 0; // Dirt
   if (blockType === 3) return 2; // Stone

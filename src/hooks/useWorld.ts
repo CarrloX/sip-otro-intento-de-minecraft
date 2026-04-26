@@ -11,7 +11,7 @@ export const useWorld = (
   renderDistanceRef: React.RefObject<number>,
   fancyLeavesRef: React.RefObject<boolean>,
   seedRef: React.RefObject<number>,
-  onWorldReady?: () => void
+  onWorldReady?: (chunksData: Map<string, Uint8Array>) => void
 ) => {
   const objectsRef = useRef<THREE.Object3D[]>([]);
   const isReadyRef = useRef(false);
@@ -148,7 +148,7 @@ export const useWorld = (
 
          if (chunksDataRef.current.size >= 9 && !isReadyRef.current) {
              isReadyRef.current = true;
-             onWorldReadyRef.current?.();
+             onWorldReadyRef.current?.(chunksDataRef.current);
          }
 
          const unifiedMaterial = materialsRef.current?.[1];

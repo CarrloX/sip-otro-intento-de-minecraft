@@ -2,12 +2,12 @@ import * as THREE from 'three';
 
 export const generateAtlas = () => {
   const canvas = document.createElement('canvas');
-  canvas.width = 96; // 6 textures * 16px
+  canvas.width = 112; // 7 textures * 16px
   canvas.height = 16;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Failed to get 2D context');
 
-  const types = ['dirt', 'grass_top', 'stone', 'wood_side', 'wood_top', 'leaves'];
+  const types = ['dirt', 'grass_top', 'stone', 'wood_side', 'wood_top', 'leaves', 'grass_side'];
   
   types.forEach((type, index) => {
     const imageData = context.createImageData(16, 16);
@@ -19,31 +19,116 @@ export const generateAtlas = () => {
         'stone': { r: 128, g: 128, b: 128, v: 20 },
         'wood_side': { r: 106, g: 75, b: 53, v: 10 },
         'wood_top': { r: 160, g: 130, b: 90, v: 5 },
-        'leaves': { r: 59, g: 122, b: 45, v: 20 }
+        'leaves': { r: 59, g: 122, b: 45, v: 20 },
+        'grass_side': { r: 121, g: 85, b: 58, v: 10 }
     };
     
     const { r: r_base, g: g_base, b: b_base, v: variance } = textureParams[type] || textureParams['dirt'];
 
-    for (let i = 0; i < data.length; i += 4) {
-      const noise = (Math.random() - 0.5) * variance;
-      let modR = r_base + noise, modG = g_base + noise, modB = b_base + noise;
-      
-      let alpha = 255;
-      if (type === 'wood_side' && (i / 4) % 16 % 4 === 0) {
-        modR -= 15; modG -= 15; modB -= 15;
-      }
-      if (type === 'leaves') {
-          if (Math.random() < 0.3) {
-              alpha = 0; // Hole in the leaf
-          } else if (Math.random() < 0.2) {
-              modR *= 0.5; modG *= 0.5; modB *= 0.5;
-          }
-      }
+    const noiseGrid = new Float32Array(256);
+    for(let k=0; k<256; k++) noiseGrid[k] = Math.random();
 
-      data[i] = Math.min(255, Math.max(0, modR));
-      data[i + 1] = Math.min(255, Math.max(0, modG));
-      data[i + 2] = Math.min(255, Math.max(0, modB));
-      data[i + 3] = alpha;
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const i = (y * 16 + x) * 4;
+        let modR = r_base, modG = g_base, modB = b_base;
+        let alpha = 255;
+
+        if (type === 'dirt') {
+            // A more earthy, granular dirt pattern
+            const n1 = noiseGrid[y * 16 + x] * 2 - 1;
+            const cx = Math.floor(x / 2);
+            const cy = Math.floor(y / 2);
+            const n2 = noiseGrid[cy * 16 + cx] * 2 - 1;
+            
+            const isRock = noiseGrid[y * 16 + x] > 0.92;
+            const isShadow = noiseGrid[y * 16 + x] < 0.08;
+            
+            const dirtVar = n1 * 6 + n2 * 12;
+            modR += dirtVar; modG += dirtVar; modB += dirtVar;
+            
+            if (isRock) { modR += 25; modG += 25; modB += 25; }
+            if (isShadow) { modR -= 25; modG -= 25; modB -= 25; }
+            
+        } else if (type === 'grass_top') {
+            // Lush, leafy grass pattern
+            const n1 = noiseGrid[y * 16 + x] * 2 - 1;
+            const cx = Math.floor(x / 2);
+            const cy = Math.floor(y / 2);
+            const n2 = noiseGrid[cy * 16 + cx] * 2 - 1;
+            
+            const streak = Math.sin(x * 1.5 + y * 2.0) * 8;
+            
+            const grassVar = n1 * 5 + n2 * 10 + streak;
+            modR += grassVar; modG += grassVar; modB += grassVar;
+            
+            if (noiseGrid[y * 16 + x] > 0.85) {
+                modR += 15; modG += 25; modB += 10;
+            }
+            if (noiseGrid[y * 16 + x] < 0.15) {
+                modR -= 15; modG -= 20; modB -= 10;
+            }
+        } else if (type === 'grass_side') {
+            // Dirt base
+            const n1 = noiseGrid[y * 16 + x] * 2 - 1;
+            const cx = Math.floor(x / 2);
+            const cy = Math.floor(y / 2);
+            const n2 = noiseGrid[cy * 16 + cx] * 2 - 1;
+            
+            const isRock = noiseGrid[y * 16 + x] > 0.92;
+            const isShadow = noiseGrid[y * 16 + x] < 0.08;
+            
+            const dirtVar = n1 * 6 + n2 * 12;
+            modR += dirtVar; modG += dirtVar; modB += dirtVar;
+            
+            if (isRock) { modR += 25; modG += 25; modB += 25; }
+            if (isShadow) { modR -= 25; modG -= 25; modB -= 25; }
+
+            // Grass top drip
+            const grassDepth = 3 + Math.floor(noiseGrid[x] * 3); // 3 to 5 pixels deep
+            if (y <= grassDepth) {
+                const grassParams = textureParams['grass_top'];
+                modR = grassParams.r;
+                modG = grassParams.g;
+                modB = grassParams.b;
+                
+                const streak = Math.sin(x * 1.5 + y * 2.0) * 8;
+                const grassVar = n1 * 5 + n2 * 10 + streak;
+                modR += grassVar; modG += grassVar; modB += grassVar;
+                
+                if (noiseGrid[y * 16 + x] > 0.85) {
+                    modR += 15; modG += 25; modB += 10;
+                }
+                if (noiseGrid[y * 16 + x] < 0.15) {
+                    modR -= 15; modG -= 20; modB -= 10;
+                }
+
+                // Add a subtle shadow underneath the grass
+                if (y === grassDepth) {
+                    modR -= 30; modG -= 30; modB -= 30;
+                }
+            }
+        } else {
+            // General noise for stone, wood, etc.
+            const noise = (noiseGrid[y * 16 + x] - 0.5) * variance;
+            modR += noise; modG += noise; modB += noise;
+            
+            if (type === 'wood_side' && x % 4 === 0) {
+              modR -= 15; modG -= 15; modB -= 15;
+            }
+            if (type === 'leaves') {
+                if (noiseGrid[y * 16 + x] < 0.3) alpha = 0;
+                else if (noiseGrid[y * 16 + x] < 0.5) {
+                    modR *= 0.5; modG *= 0.5; modB *= 0.5;
+                }
+            }
+        }
+
+        data[i] = Math.min(255, Math.max(0, modR));
+        data[i + 1] = Math.min(255, Math.max(0, modG));
+        data[i + 2] = Math.min(255, Math.max(0, modB));
+        data[i + 3] = alpha;
+      }
     }
     
     context.putImageData(imageData, index * 16, 0);

@@ -8,6 +8,8 @@ import type { SelectionResult } from '../services/SelectionService';
 import { usePlayer } from './usePlayer';
 import { useInteraction } from './useInteraction';
 import { useWorld } from './useWorld';
+import { commandService } from '../services/CommandService';
+import { getGlobalBlockType, Y_MIN, Y_MAX } from '../services/WorldService';
 
 const updateDebugUI = (camera: THREE.PerspectiveCamera) => {
   const posX = camera.position.x;
@@ -52,6 +54,8 @@ export interface MinecraftOptions {
   autoJump?: boolean;
   fancyLeaves?: boolean;
   showClouds?: boolean;
+  enableShadows?: boolean;
+  brightness?: number;
   seed?: number;
   onWorldReady?: () => void;
 }
@@ -63,6 +67,8 @@ export const useMinecraft = ({
   autoJump = true,
   fancyLeaves = true,
   showClouds = true,
+  enableShadows = true,
+  brightness = 50,
   seed = 0,
   onWorldReady
 }: MinecraftOptions) => {
@@ -120,12 +126,54 @@ export const useMinecraft = ({
       lightingSystemRef.current.cloudGroup.visible = showClouds;
     }
   }, [showClouds]);
+
+  useEffect(() => {
+    if (rendererRef.current && sceneRef.current) {
+      rendererRef.current.shadowMap.enabled = enableShadows;
+      sceneRef.current.traverse((child: any) => {
+        if (child.material) {
+          child.material.needsUpdate = true;
+        }
+      });
+    }
+  }, [enableShadows]);
+  
+  useEffect(() => {
+    if (rendererRef.current) {
+      rendererRef.current.toneMapping = THREE.LinearToneMapping;
+      rendererRef.current.toneMappingExposure = brightness / 50;
+    }
+  }, [brightness]);
   
   const seedRef = useRef(seed);
   useEffect(() => { seedRef.current = seed; }, [seed]);
 
   const isWorldReadyRef = useRef(false);
-  const handleWorldReady = useCallback(() => {
+  const handleWorldReady = useCallback((chunksData: Map<string, Uint8Array>) => {
+    if (!isWorldReadyRef.current && cameraRef.current) {
+        const px = Math.floor(cameraRef.current.position.x);
+        const pz = Math.floor(cameraRef.current.position.z);
+        const currentY = cameraRef.current.position.y;
+        
+        let highestY = Y_MIN - 1;
+        for (let y = Y_MAX; y >= Y_MIN; y--) {
+            const block = getGlobalBlockType(px, y, pz, chunksData);
+            if (block !== 0 && block !== 5) {
+                highestY = y;
+                break;
+            }
+        }
+        
+        if (highestY > Y_MIN - 1) {
+            // Player height is ~1.6. Block top is at highestY + 0.5.
+            // Eyes should be at highestY + 0.5 + 1.6 = highestY + 2.1.
+            // We use highestY + 2.2 to be slightly above the ground and avoid embedding.
+            const safeY = highestY + 2.2;
+            
+            // Always set the camera to the safe Y so they don't fall from the sky
+            cameraRef.current.position.y = safeY;
+        }
+    }
     isWorldReadyRef.current = true;
     onWorldReady?.();
   }, [onWorldReady]);
@@ -177,7 +225,9 @@ export const useMinecraft = ({
     const renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setPixelRatio(globalThis.devicePixelRatio);
     renderer.setSize(globalThis.innerWidth, globalThis.innerHeight);
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = enableShadows;
+    renderer.toneMapping = THREE.LinearToneMapping;
+    renderer.toneMappingExposure = brightness / 50;
     mountNode.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -203,6 +253,33 @@ export const useMinecraft = ({
     // 6. Highlighter & Interactions
     const highlighter = createHighlighter();
     scene.add(highlighter);
+
+    commandService.register('/time', (action?: string, value?: string) => {
+        if (action === 'set') {
+            if (value === 'day') {
+                worldTime = Math.PI / 4;
+                return 'Time set to day';
+            } else if (value === 'night') {
+                worldTime = Math.PI + Math.PI / 4;
+                return 'Time set to night';
+            }
+            return 'Usage: /time set <day|night>';
+        }
+        return 'Usage: /time set <day|night>';
+    });
+
+    commandService.register('/tp', (x?: string, y?: string, z?: string) => {
+        if (x !== undefined && y !== undefined && z !== undefined) {
+            const px = parseFloat(x);
+            const py = parseFloat(y);
+            const pz = parseFloat(z);
+            if (!isNaN(px) && !isNaN(py) && !isNaN(pz)) {
+                camera.position.set(px, py, pz);
+                return `Teleported to ${px} ${py} ${pz}`;
+            }
+        }
+        return 'Usage: /tp <x> <y> <z>';
+    });
 
     const handleMouseDown = (e: MouseEvent) => interaction.handleMouseDown(e);
     document.addEventListener('mousedown', handleMouseDown);
@@ -289,6 +366,8 @@ export const useMinecraft = ({
       document.removeEventListener('mousedown', handleMouseDown);
       controls.removeEventListener('lock', onLock);
       controls.removeEventListener('unlock', onUnlock);
+      commandService.unregister('/time');
+      commandService.unregister('/tp');
       renderer.dispose();
       renderer.domElement.remove();
       world.chunksDataRef.current.clear();

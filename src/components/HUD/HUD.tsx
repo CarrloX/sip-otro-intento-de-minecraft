@@ -18,10 +18,14 @@ interface HudProps {
   onFancyLeavesChange: (fancyLeaves: boolean) => void;
   showClouds: boolean;
   onShowCloudsChange: (showClouds: boolean) => void;
+  enableShadows: boolean;
+  onEnableShadowsChange: (enableShadows: boolean) => void;
+  brightness: number;
+  onBrightnessChange: (brightness: number) => void;
   onMenuToggle: () => void;
 }
 
-const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, onMenuToggle }: HudProps) => {
+const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, enableShadows, onEnableShadowsChange, brightness, onBrightnessChange, onMenuToggle }: HudProps) => {
   return (
     <div id="ui-layer">
       <div className="debug-info">
@@ -48,6 +52,10 @@ const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange,
         onFancyLeavesChange={onFancyLeavesChange}
         showClouds={showClouds}
         onShowCloudsChange={onShowCloudsChange}
+        enableShadows={enableShadows}
+        onEnableShadowsChange={onEnableShadowsChange}
+        brightness={brightness}
+        onBrightnessChange={onBrightnessChange}
         onClose={onMenuToggle}
       />
     </div>

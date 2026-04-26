@@ -8,6 +8,7 @@ export interface LightingSystem {
   moonLight: THREE.DirectionalLight;
   moonMesh: THREE.Mesh;
   cloudGroup: THREE.Group;
+  starsPoints: THREE.Points;
 }
 
 const colorKeyframes = [
@@ -67,7 +68,7 @@ const setupSun = (scene: THREE.Scene) => {
   scene.add(sunLight);
   scene.add(sunLight.target); 
 
-  const sunGeo = new THREE.BoxGeometry(10, 10, 10);
+  const sunGeo = new THREE.BoxGeometry(40, 40, 40);
   const sunMat = new THREE.MeshBasicMaterial({ color: 0xffffee, fog: false });
   const sunMesh = new THREE.Mesh(sunGeo, sunMat);
   scene.add(sunMesh);
@@ -77,16 +78,63 @@ const setupSun = (scene: THREE.Scene) => {
 
 const setupMoon = (scene: THREE.Scene) => {
   const moonLight = new THREE.DirectionalLight(0xaaaaee, 0.2); 
-  moonLight.castShadow = false; // Disable moon shadows to save GPU
+  moonLight.castShadow = false; // Toggled dynamically
+  moonLight.shadow.mapSize.width = 2048; 
+  moonLight.shadow.mapSize.height = 2048;
+  moonLight.shadow.camera.near = 0.5;
+  moonLight.shadow.camera.far = 600; 
+  
+  const shadowCamSize = 64; 
+  moonLight.shadow.camera.left = -shadowCamSize;
+  moonLight.shadow.camera.right = shadowCamSize;
+  moonLight.shadow.camera.top = shadowCamSize;
+  moonLight.shadow.camera.bottom = -shadowCamSize;
+  moonLight.shadow.bias = -0.0005; 
   scene.add(moonLight);
   scene.add(moonLight.target);
 
-  const moonGeo = new THREE.BoxGeometry(8, 8, 8);
+  const moonGeo = new THREE.BoxGeometry(32, 32, 32);
   const moonMat = new THREE.MeshBasicMaterial({ color: 0xaaaaee, fog: false });
   const moonMesh = new THREE.Mesh(moonGeo, moonMat);
   scene.add(moonMesh);
   
   return { moonLight, moonMesh };
+};
+
+const setupStars = (scene: THREE.Scene) => {
+  const starsGeometry = new THREE.BufferGeometry();
+  const starsCount = 1500;
+  const positions = new Float32Array(starsCount * 3);
+  
+  const radius = 400; // Just inside the Far plane
+  for (let i = 0; i < starsCount; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(Math.random() * 2 - 1);
+    
+    const x = radius * Math.sin(phi) * Math.cos(theta);
+    const y = radius * Math.cos(phi);
+    const z = radius * Math.sin(phi) * Math.sin(theta);
+    
+    positions[i * 3] = x;
+    positions[i * 3 + 1] = y;
+    positions[i * 3 + 2] = z;
+  }
+  
+  starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  
+  const starsMaterial = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 1.5,
+    sizeAttenuation: false,
+    transparent: true,
+    opacity: 0.0, // Invisible by default
+    fog: false // Not affected by fog
+  });
+  
+  const starsPoints = new THREE.Points(starsGeometry, starsMaterial);
+  scene.add(starsPoints);
+  
+  return starsPoints;
 };
 
 const fillMapRectangles = (
@@ -198,6 +246,7 @@ const setupClouds = (scene: THREE.Scene) => {
     const cloudGeo = buildCloudGeometry(map, W, SCALE, T);
   
     const cloudMaterial: any = new THREE.MeshBasicMaterial({
+       color: 0xffffff,
        vertexColors: true,
        transparent: true,
        opacity: 0.85,
@@ -258,8 +307,9 @@ export const setupLighting = (scene: THREE.Scene, initialRenderDistance: number 
   const { sunLight, sunMesh } = setupSun(scene);
   const { moonLight, moonMesh } = setupMoon(scene);
   const cloudGroup = setupClouds(scene);
+  const starsPoints = setupStars(scene);
 
-  return { ambientLight, sunLight, sunMesh, moonLight, moonMesh, cloudGroup };
+  return { ambientLight, sunLight, sunMesh, moonLight, moonMesh, cloudGroup, starsPoints };
 };
 
 export const updateLighting = (
@@ -296,19 +346,54 @@ export const updateLighting = (
   
   const isDay = Math.sin(time) > 0;
   system.sunLight.intensity = isDay ? Math.min(1.2, Math.sin(time) * 1.5) : 0;
-  system.moonLight.intensity = isDay ? 0 : Math.min(0.2, Math.abs(Math.sin(time)) * 0.3);
+  system.moonLight.intensity = isDay ? 0 : Math.min(0.35, Math.abs(Math.sin(time)) * 0.5);
   
-  const minAmbient = 0.05;
+  const minAmbient = 0.12;
   const maxAmbient = 0.6;
   system.ambientLight.intensity = isDay 
       ? minAmbient + (maxAmbient - minAmbient) * Math.sin(time)
       : minAmbient;
 
-  system.sunLight.shadow.camera.updateProjectionMatrix();
+  if (isDay) {
+      if (!system.sunLight.castShadow) system.sunLight.castShadow = true;
+      if (system.moonLight.castShadow) system.moonLight.castShadow = false;
+      system.sunLight.shadow.camera.updateProjectionMatrix();
+  } else {
+      if (system.sunLight.castShadow) system.sunLight.castShadow = false;
+      if (!system.moonLight.castShadow) system.moonLight.castShadow = true;
+      system.moonLight.shadow.camera.updateProjectionMatrix();
+  }
+
+  // === Update Stars ===
+  if (system.starsPoints) {
+      const starOpacity = isDay ? 0 : Math.min(1.0, Math.abs(Math.sin(time)) * 2.0);
+      (system.starsPoints.material as THREE.PointsMaterial).opacity = starOpacity;
+      
+      // Center stars on player and rotate them with time
+      system.starsPoints.position.copy(playerPosition);
+      // Offset the rotation so stars don't align perfectly with the sun/moon in a weird way,
+      // and make them rotate much slower as requested.
+      system.starsPoints.rotation.z = time * 0.05; 
+  }
 
   // === Update Clouds ===
   const W_WORLD = 128 * 8; // W (128) * SCALE (8)
   const mod = (n: number, m: number) => ((n % m) + m) % m;
+  
+  let cloudColor: THREE.Color;
+  if (isDay) {
+      // Lerp towards white at noon, use sky color at sunrise/sunset
+      cloudColor = skyColor.clone().lerp(new THREE.Color(0xffffff), Math.sin(time));
+  } else {
+      // Lerp towards a dark bluish-gray at midnight
+      cloudColor = skyColor.clone().lerp(new THREE.Color(0x1a1a2e), -Math.sin(time));
+  }
+
+  system.cloudGroup.children.forEach((mesh: any) => {
+      if (mesh.material && mesh.material.color) {
+          mesh.material.color.copy(cloudColor);
+      }
+  });
   
   // Drift slowly towards positive X and Z
   const scrollBaseX = playerPosition.x - time * 6; 
