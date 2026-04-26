@@ -3,6 +3,38 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import type { SelectionResult } from '../services/SelectionService';
 
+/** Block type ID for the base wood log (Y-axis / vertical) */
+const LOG_BLOCK_TYPE = 4;
+/** Log oriented along the X axis (east/west) */
+const LOG_X_TYPE = 8;
+/** Log oriented along the Z axis (north/south) */
+const LOG_Z_TYPE = 9;
+
+/**
+ * Resolves the actual block type to place.
+ * For wood logs (type 4), the orientation depends on where the player is looking:
+ *  - Looking mostly up/down  → Y-axis log (type 4, vertical)
+ *  - Looking mostly east/west → X-axis log (type 8)
+ *  - Looking mostly north/south → Z-axis log (type 9)
+ */
+const resolveBlockType = (type: number, camera: THREE.PerspectiveCamera): number => {
+  if (type !== LOG_BLOCK_TYPE) return type;
+
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+
+  const absX = Math.abs(dir.x);
+  const absY = Math.abs(dir.y);
+  const absZ = Math.abs(dir.z);
+
+  // If player looks steeply up or down, place a vertical log
+  if (absY > absX && absY > absZ) return LOG_BLOCK_TYPE;
+  // If horizontal component is bigger along X, place an X-axis log
+  if (absX >= absZ) return LOG_X_TYPE;
+  // Otherwise place a Z-axis log
+  return LOG_Z_TYPE;
+};
+
 export const useInteraction = (
   _objectsRef: React.RefObject<THREE.Object3D[]>,
   cameraRef: React.RefObject<THREE.PerspectiveCamera | null>,
@@ -33,12 +65,14 @@ export const useInteraction = (
       ) {
         return;
       }
+
+      const blockType = resolveBlockType(currentBlockTypeRef.current, cameraRef.current);
       
       addBlockFn(
         Math.round(pos.x),
         Math.round(pos.y),
         Math.round(pos.z),
-        currentBlockTypeRef.current
+        blockType
       );
     }
   }, [cameraRef, controlsRef, addBlockFn, removeBlockFn, currentBlockTypeRef, hoveredBlockRef]);

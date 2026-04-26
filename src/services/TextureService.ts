@@ -3,9 +3,9 @@ import * as THREE from 'three';
 const TEXTURE_PARAMS: Record<string, { r: number, g: number, b: number, v: number }> = {
     'dirt': { r: 121, g: 85, b: 58, v: 10 },
     'grass_top': { r: 65, g: 152, b: 49, v: 15 },
-    'stone': { r: 128, g: 128, b: 128, v: 20 },
-    'wood_side': { r: 106, g: 75, b: 53, v: 10 },
-    'wood_top': { r: 160, g: 130, b: 90, v: 5 },
+    'stone': { r: 120, g: 122, b: 125, v: 15 },
+    'wood_side': { r: 100, g: 70, b: 50, v: 15 },
+    'wood_top': { r: 175, g: 150, b: 110, v: 10 },
     'leaves': { r: 59, g: 122, b: 45, v: 20 },
     'grass_side': { r: 121, g: 85, b: 58, v: 10 },
     'sand': { r: 219, g: 209, b: 160, v: 8 }
@@ -51,6 +51,79 @@ const getGrassSidePixel = (x: number, y: number, noiseGrid: Float32Array, r: num
     return getDirtPixel(x, y, noiseGrid, r, g, b);
 };
 
+const getWoodSidePixel = (x: number, y: number, noiseGrid: Float32Array, r: number, g: number, b: number, v: number) => {
+    const noise = noiseGrid[y * 16 + x];
+    const n = (noise - 0.5) * v;
+    
+    // Vertical grooves/crevices
+    const column = x % 4;
+    const groove = (column === 0 || column === 3) ? -15 : 0;
+    const verticalGrain = Math.sin(y * 0.8) * 5;
+    
+    let modR = r + n + groove + verticalGrain;
+    let modG = g + n + groove + verticalGrain;
+    let modB = b + n + groove + verticalGrain;
+    
+    // Random darker spots for "bark texture"
+    if (noise > 0.8) { modR -= 10; modG -= 10; modB -= 10; }
+    
+    return { r: modR, g: modG, b: modB, a: 255 };
+};
+
+const getWoodTopPixel = (x: number, y: number, noiseGrid: Float32Array, r: number, g: number, b: number, v: number) => {
+    const dx = x - 7.5;
+    const dy = y - 7.5;
+    const dist = Math.hypot(dx, dy);
+    const noise = noiseGrid[y * 16 + x];
+    
+    // Bark border
+    if (dist > 6.5) {
+        const side = TEXTURE_PARAMS['wood_side'];
+        return getWoodSidePixel(x, y, noiseGrid, side.r, side.g, side.b, side.v);
+    }
+    
+    // Concentric rings
+    const ring = Math.floor(dist / 1.8);
+    const ringVar = (ring % 2 === 0) ? 0 : -15;
+    const fineGrain = Math.sin(dist * 5) * 5;
+    
+    let modR = r + ringVar + fineGrain + (noise - 0.5) * v;
+    let modG = g + ringVar + fineGrain + (noise - 0.5) * v;
+    let modB = b + ringVar + fineGrain + (noise - 0.5) * v;
+    
+    // Slight darkening towards the center
+    const centerDarkness = (1 - dist / 8) * -10;
+    modR += centerDarkness; modG += centerDarkness; modB += centerDarkness;
+
+    return { r: modR, g: modG, b: modB, a: 255 };
+};
+
+const getStonePixel = (x: number, y: number, noiseGrid: Float32Array, r: number, g: number, b: number) => {
+    const noise = noiseGrid[y * 16 + x];
+    const n1 = noise;
+    // Use neighboring pixels for smoother transitions (larger "clumps")
+    const n2 = noiseGrid[Math.floor(y / 2) * 16 + Math.floor(x / 2)];
+    const n3 = noiseGrid[Math.floor(y / 4) * 16 + Math.floor(x / 4)];
+    
+    // Base variation
+    const variation = (n1 * 5) + (n2 * 15) + (n3 * 10) - 15;
+    
+    let modR = r + variation;
+    let modG = g + variation;
+    let modB = b + variation;
+    
+    // Simulate "cracks" or edges
+    if (n1 > 0.8 && n2 < 0.3) {
+        modR -= 20; modG -= 20; modB -= 20;
+    }
+    // Lighter highlights
+    if (n1 < 0.1) {
+        modR += 10; modG += 10; modB += 10;
+    }
+    
+    return { r: modR, g: modG, b: modB, a: 255 };
+};
+
 const getGenericPixel = (type: string, x: number, y: number, noiseGrid: Float32Array, params: { r: number, g: number, b: number, v: number }) => {
     const { r, g, b, v } = params;
     const noise = noiseGrid[y * 16 + x];
@@ -59,7 +132,6 @@ const getGenericPixel = (type: string, x: number, y: number, noiseGrid: Float32A
     let modG = g + n;
     let modB = b + n;
     let alpha = 255;
-    if (type === 'wood_side' && x % 4 === 0) { modR -= 15; modG -= 15; modB -= 15; }
     if (type === 'leaves') {
         if (noise < 0.3) alpha = 0;
         else if (noise < 0.5) { modR *= 0.5; modG *= 0.5; modB *= 0.5; }
@@ -93,6 +165,12 @@ export const generateAtlas = () => {
           pixel = getGrassTopPixel(x, y, noiseGrid, params.r, params.g, params.b);
         } else if (type === 'grass_side') {
           pixel = getGrassSidePixel(x, y, noiseGrid, params.r, params.g, params.b);
+        } else if (type === 'stone') {
+          pixel = getStonePixel(x, y, noiseGrid, params.r, params.g, params.b);
+        } else if (type === 'wood_side') {
+          pixel = getWoodSidePixel(x, y, noiseGrid, params.r, params.g, params.b, params.v);
+        } else if (type === 'wood_top') {
+          pixel = getWoodTopPixel(x, y, noiseGrid, params.r, params.g, params.b, params.v);
         } else {
           pixel = getGenericPixel(type, x, y, noiseGrid, params);
         }
@@ -139,6 +217,9 @@ export const createMaterials = () => {
   materials[3] = unifiedMaterial;
   materials[4] = unifiedMaterial;
   materials[5] = unifiedMaterial;
+  materials[6] = unifiedMaterial;
+  materials[8] = unifiedMaterial; // Log X-axis
+  materials[9] = unifiedMaterial; // Log Z-axis
   return materials;
 };
 

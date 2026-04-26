@@ -2,20 +2,22 @@ import { CHUNK_SIZE, Y_MIN, Y_MAX, CHUNK_VOLUME, getBlockIndex, noise, pseudoRan
 
 const ATLAS_COLS = 8;
 const getTexIndex = (blockType: number, face: string): number => {
-  if (blockType === 1) { // Grass
-    if (face === 'top') return 1;
-    if (face === 'bottom') return 0;
-    return 6; // Sides
+  switch (blockType) {
+    case 1: // Grass
+      if (face === 'top') return 1;
+      return face === 'bottom' ? 0 : 6;
+    case 2: return 0; // Dirt
+    case 3: return 2; // Stone
+    case 4: // Log - Y axis
+      return (face === 'top' || face === 'bottom') ? 4 : 3;
+    case 8: // Log - X axis
+      return (face === 'right' || face === 'left') ? 4 : 3;
+    case 9: // Log - Z axis
+      return (face === 'front' || face === 'back') ? 4 : 3;
+    case 5: return 5; // Leaves
+    case 6: return 7; // Sand
+    default: return 0;
   }
-  if (blockType === 2) return 0; // Dirt
-  if (blockType === 3) return 2; // Stone
-  if (blockType === 4) { // Wood
-    if (face === 'top' || face === 'bottom') return 4;
-    return 3;
-  }
-  if (blockType === 5) return 5; // Leaves
-  if (blockType === 6) return 7; // Sand
-  return 0;
 };
 
 export const PAD = 15;
