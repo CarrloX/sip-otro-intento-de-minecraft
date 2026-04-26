@@ -102,9 +102,9 @@
 }
 
 .new-world-plus {
-  background: rgba(79, 70, 229, 0.2);
-  border: 1px solid rgba(99, 102, 241, 0.4);
-  color: #a5b4fc;
+  background: #4f46e5;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
   padding: 0.5rem 1rem;
   border-radius: 10px;
   font-weight: 600;
@@ -116,8 +116,12 @@
 }
 
 .new-world-plus:hover {
-  background: rgba(79, 70, 229, 0.4);
+  background: #4338ca;
   transform: translateY(-1px);
+}
+
+.new-world-plus:active {
+  transform: translateY(0);
 }
 
 .new-world-plus span {
@@ -151,20 +155,35 @@
 
 .world-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.25rem;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
   border: 1px solid transparent;
+  overflow: hidden;
+  transition: all 0.2s ease;
 }
 
 .world-item:hover {
   background: rgba(255, 255, 255, 0.07);
   border-color: rgba(99, 102, 241, 0.3);
-  transform: translateX(4px);
+}
+
+.world-item-button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: transparent;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.2s ease;
+}
+
+.world-item-button:focus {
+  background: rgba(99, 102, 241, 0.1);
 }
 
 .world-info {
@@ -176,7 +195,7 @@
 .world-name {
   color: white;
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
 }
 
 .world-details {
@@ -195,8 +214,8 @@
 }
 
 .delete-world-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: #3a1515;
+  color: #ffb3b3;
 }
 
 .worlds-status {
@@ -275,9 +294,9 @@
 
 .cancel-btn {
   flex: 1;
-  background: rgba(255, 255, 255, 0.05);
+  background: #2a2a2a;
   color: white;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 0.8rem;
   border-radius: 10px;
   cursor: pointer;

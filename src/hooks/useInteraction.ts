@@ -35,16 +35,25 @@ const resolveBlockType = (type: number, camera: THREE.PerspectiveCamera): number
   return LOG_Z_TYPE;
 };
 
-export const useInteraction = (
-  _objectsRef: React.RefObject<THREE.Object3D[]>,
-  cameraRef: React.RefObject<THREE.PerspectiveCamera | null>,
-  controlsRef: React.RefObject<PointerLockControls | null>,
-  addBlockFn: (x: number, y: number, z: number, type: number) => void,
-  removeBlockFn: (x: number, y: number, z: number) => void,
-  currentBlockTypeRef: React.RefObject<number>,
-  hoveredBlockRef: React.RefObject<SelectionResult | null>,
-  _worldId: string
-) => {
+export interface InteractionOptions {
+  objectsRef: React.RefObject<THREE.Object3D[]>;
+  cameraRef: React.RefObject<THREE.PerspectiveCamera | null>;
+  controlsRef: React.RefObject<PointerLockControls | null>;
+  addBlockFn: (x: number, y: number, z: number, type: number) => void;
+  removeBlockFn: (x: number, y: number, z: number) => void;
+  currentBlockTypeRef: React.RefObject<number>;
+  hoveredBlockRef: React.RefObject<SelectionResult | null>;
+  worldId: string;
+}
+
+export const useInteraction = ({
+  cameraRef,
+  controlsRef,
+  addBlockFn,
+  removeBlockFn,
+  currentBlockTypeRef,
+  hoveredBlockRef
+}: InteractionOptions) => {
   const handleMouseDown = useCallback((event: MouseEvent) => {
     if (!controlsRef.current?.isLocked || !cameraRef.current || !hoveredBlockRef.current) return;
 

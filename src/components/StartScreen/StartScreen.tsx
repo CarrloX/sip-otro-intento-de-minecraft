@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type SyntheticEvent } from 'react';
 import { initDB, getAllWorlds, deleteWorld, type WorldMetadata } from '../../services/StorageService';
 import './StartScreen.css';
 
@@ -22,7 +22,8 @@ const StartScreen = ({ onCreateWorld, onSelectWorld }: StartScreenProps) => {
     try {
       const db = await initDB();
       const allWorlds = await getAllWorlds(db);
-      setWorlds(allWorlds.sort((a, b) => b.lastPlayed - a.lastPlayed));
+      const sortedWorlds = [...allWorlds].sort((a, b) => b.lastPlayed - a.lastPlayed);
+      setWorlds(sortedWorlds);
     } catch (e) {
       console.error('Failed to load worlds', e);
     } finally {
@@ -30,14 +31,14 @@ const StartScreen = ({ onCreateWorld, onSelectWorld }: StartScreenProps) => {
     }
   };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     e.stopPropagation();
     if (!newWorldName.trim()) return;
 
     const seed = newWorldSeed.trim() === '' 
       ? Math.floor(Math.random() * 1000000) 
-      : parseInt(newWorldSeed) || 0;
+      : Number.parseInt(newWorldSeed) || 0;
 
     onCreateWorld(newWorldName, seed);
   };
@@ -46,6 +47,34 @@ const StartScreen = ({ onCreateWorld, onSelectWorld }: StartScreenProps) => {
     e.preventDefault();
     e.stopPropagation();
     onSelectWorld(id, seed, position, rotation, worldTime);
+  };
+
+  const renderWorldsList = () => {
+    if (loading) {
+      return <div className="worlds-status">Loading worlds...</div>;
+    }
+
+    if (worlds.length === 0) {
+      return <div className="worlds-status">No worlds found. Create your first one!</div>;
+    }
+
+    return worlds.map(world => (
+      <div key={world.id} className="world-item">
+        <button 
+          className="world-item-button"
+          onClick={(e) => handleSelectWorldLocal(e, world.id, world.seed, world.playerPosition, world.playerRotation, world.worldTime)}
+          title={`Play ${world.name}`}
+        >
+          <div className="world-info">
+            <span className="world-name">{world.name}</span>
+            <span className="world-details">Seed: {world.seed} • Played: {formatDate(world.lastPlayed)}</span>
+          </div>
+        </button>
+        <button className="delete-world-btn" onClick={(e) => handleDeleteWorld(e, world.id)} title="Delete World">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>
+      </div>
+    ));
   };
 
   const handleDeleteWorld = async (e: React.MouseEvent, id: string) => {
@@ -87,23 +116,7 @@ const StartScreen = ({ onCreateWorld, onSelectWorld }: StartScreenProps) => {
           </div>
 
           <div className="worlds-list">
-            {loading ? (
-              <div className="worlds-status">Loading worlds...</div>
-            ) : worlds.length === 0 ? (
-              <div className="worlds-status">No worlds found. Create your first one!</div>
-            ) : (
-              worlds.map(world => (
-                <div key={world.id} className="world-item" onClick={(e) => handleSelectWorldLocal(e, world.id, world.seed, world.playerPosition, world.playerRotation, world.worldTime)}>
-                  <div className="world-info">
-                    <span className="world-name">{world.name}</span>
-                    <span className="world-details">Seed: {world.seed} • Played: {formatDate(world.lastPlayed)}</span>
-                  </div>
-                  <button className="delete-world-btn" onClick={(e) => handleDeleteWorld(e, world.id)} title="Delete World">
-                    <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                  </button>
-                </div>
-              ))
-            )}
+            {renderWorldsList()}
           </div>
         </div>
       </div>
@@ -114,8 +127,9 @@ const StartScreen = ({ onCreateWorld, onSelectWorld }: StartScreenProps) => {
             <h2>Create New World</h2>
             <form onSubmit={handleCreateSubmit}>
               <div className="input-group">
-                <label>World Name</label>
+                <label htmlFor="world-name">World Name</label>
                 <input 
+                  id="world-name"
                   type="text" 
                   value={newWorldName} 
                   onChange={(e) => setNewWorldName(e.target.value)} 
@@ -125,12 +139,13 @@ const StartScreen = ({ onCreateWorld, onSelectWorld }: StartScreenProps) => {
                 />
               </div>
               <div className="input-group">
-                <label>Seed (Optional)</label>
+                <label htmlFor="world-seed">Seed (Optional)</label>
                 <input 
+                  id="world-seed"
                   type="number" 
                   value={newWorldSeed} 
                   onChange={(e) => setNewWorldSeed(e.target.value)} 
-                  placeholder="Random"
+                  placeholder="Leave empty for random"
                 />
               </div>
               <div className="modal-actions">

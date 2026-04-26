@@ -11,6 +11,26 @@ import { useWorld } from './useWorld';
 import { commandService } from '../services/CommandService';
 import { getGlobalBlockType, Y_MIN, Y_MAX } from '../services/WorldService';
 
+const findSafeSpawnY = (px: number, pz: number, chunksData: Map<string, Uint8Array>): number => {
+    let safeY = 30; // Default fallback
+    
+    // Find the highest solid block that has at least 2 blocks of air above it
+    for (let y = Y_MAX - 2; y >= Y_MIN; y--) {
+        const block = getGlobalBlockType(px, y, pz, chunksData);
+        if (block !== 0) { // Found a solid block
+            const above1 = getGlobalBlockType(px, y + 1, pz, chunksData);
+            const above2 = getGlobalBlockType(px, y + 2, pz, chunksData);
+            
+            // If there's enough head room (at least 2 blocks of air)
+            if (above1 === 0 && above2 === 0) {
+                safeY = y + 2.2;
+                break;
+            }
+        }
+    }
+    return safeY;
+};
+
 const updateDebugUI = (camera: THREE.PerspectiveCamera) => {
   const posX = camera.position.x;
   const posY = camera.position.y;
@@ -88,7 +108,6 @@ export const useMinecraft = ({
   const [currentWorldTime, setCurrentWorldTime] = useState<number>(initialWorldTime ?? Math.PI / 4);
   const frameCount = useRef(0);
   const lastFpsUpdate = useRef<number>(0);
-  const lastPositionUpdate = useRef<number>(0);
   
   const currentBlockTypeRef = useRef(currentBlockType);
   const targetFpsRef = useRef(targetFps);
@@ -173,32 +192,23 @@ export const useMinecraft = ({
         if (!initialPosition) {
             const px = Math.floor(cameraRef.current.position.x);
             const pz = Math.floor(cameraRef.current.position.z);
-            
-            let safeY = 30; // Default fallback
-            
-            // Find the highest solid block that has at least 2 blocks of air above it
-            for (let y = Y_MAX - 2; y >= Y_MIN; y--) {
-                const block = getGlobalBlockType(px, y, pz, chunksData);
-                if (block !== 0) { // Found a solid block
-                    const above1 = getGlobalBlockType(px, y + 1, pz, chunksData);
-                    const above2 = getGlobalBlockType(px, y + 2, pz, chunksData);
-                    
-                    // If there's enough head room (at least 2 blocks of air)
-                    if (above1 === 0 && above2 === 0) {
-                        safeY = y + 2.2;
-                        break;
-                    }
-                }
-            }
-            
-            cameraRef.current.position.y = safeY;
+            cameraRef.current.position.y = findSafeSpawnY(px, pz, chunksData);
         }
     }
     isWorldReadyRef.current = true;
     onWorldReady?.();
   }, [onWorldReady, initialPosition]);
 
-  const world = useWorld(sceneRef, materialsRef, blockGeometryRef, renderDistanceRef, fancyLeavesRef, seedRef, worldId, handleWorldReady);
+  const world = useWorld({
+    sceneRef,
+    materialsRef,
+    blockGeometryRef,
+    renderDistanceRef,
+    fancyLeavesRef,
+    seedRef,
+    worldId,
+    onWorldReady: handleWorldReady
+  });
 
   const autoJumpRef = useRef(autoJump);
   useEffect(() => {
@@ -207,16 +217,16 @@ export const useMinecraft = ({
 
   const player = usePlayer(world.chunksDataRef, autoJumpRef);
   
-  const interaction = useInteraction(
-    world.objectsRef,
+  const interaction = useInteraction({
+    objectsRef: world.objectsRef,
     cameraRef,
     controlsRef,
-    world.addBlock,
-    world.removeBlock,
+    addBlockFn: world.addBlock,
+    removeBlockFn: world.removeBlock,
     currentBlockTypeRef,
     hoveredBlockRef,
     worldId
-  );
+  });
 
   const lockControls = useCallback(() => {
     controlsRef.current?.lock();

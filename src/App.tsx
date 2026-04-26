@@ -116,7 +116,7 @@ function App() {
   const handleCreateWorld = async (name: string, newSeed: number) => {
     if (!document.pointerLockElement) {
         try {
-            document.body.requestPointerLock();
+            await document.body.requestPointerLock();
         } catch (e) {
             console.warn("Initial pointer lock request failed", e);
         }
@@ -147,7 +147,7 @@ function App() {
   const handleSelectWorld = async (worldId: string, worldSeed: number, playerPosition?: {x: number, y: number, z: number}, playerRotation?: {x: number, y: number}, worldTime?: number) => {
     if (!document.pointerLockElement) {
         try {
-            document.body.requestPointerLock();
+            await document.body.requestPointerLock();
         } catch (e) {
             console.warn("Initial pointer lock request failed", e);
         }

@@ -18,6 +18,8 @@ interface GameCanvasProps {
   initialPosition?: {x: number, y: number, z: number};
   initialRotation?: {x: number, y: number};
   initialWorldTime?: number;
+  isConsoleOpen?: boolean;
+  onWorldReady: () => void;
   onStatusChange: (status: { isLocked: boolean; lockControls: () => void; fps: number; position?: {x: number, y: number, z: number}; rotation?: {x: number, y: number}; worldTime?: number }) => void;
 }
 

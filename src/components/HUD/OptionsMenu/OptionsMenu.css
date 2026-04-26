@@ -124,8 +124,8 @@
 }
 
 .quit-button {
-    background: rgba(255, 255, 255, 0.05);
-    color: #888;
+    background: #2a2a2a;
+    color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.1);
     margin-top: 1rem;
     padding: 0.8rem 2rem;
@@ -139,7 +139,7 @@
 }
 
 .quit-button:hover {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
-    border-color: rgba(239, 68, 68, 0.3);
-}
+    background: #3a1515;
+    color: #ffb3b3;
+    border-color: rgba(239, 68, 68, 0.4);
+    }

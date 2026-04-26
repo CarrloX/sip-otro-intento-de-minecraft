@@ -4,16 +4,27 @@ import { CHUNK_SIZE, Y_MIN, Y_MAX, getBlockIndex } from '../services/WorldServic
 import ChunkWorker from '../workers/ChunkWorker?worker';
 import { initDB, saveBlock, loadAllBlocks } from '../services/StorageService';
 
-export const useWorld = (
-  sceneRef: React.RefObject<THREE.Scene | null>,
-  materialsRef: React.RefObject<Record<number, THREE.Material | THREE.Material[]>>,
-  blockGeometryRef: React.RefObject<THREE.BoxGeometry>,
-  renderDistanceRef: React.RefObject<number>,
-  fancyLeavesRef: React.RefObject<boolean>,
-  seedRef: React.RefObject<number>,
-  worldId: string,
-  onWorldReady?: (chunksData: Map<string, Uint8Array>) => void
-) => {
+export interface WorldOptions {
+  sceneRef: React.RefObject<THREE.Scene | null>;
+  materialsRef: React.RefObject<Record<number, THREE.Material | THREE.Material[]>>;
+  blockGeometryRef: React.RefObject<THREE.BoxGeometry>;
+  renderDistanceRef: React.RefObject<number>;
+  fancyLeavesRef: React.RefObject<boolean>;
+  seedRef: React.RefObject<number>;
+  worldId: string;
+  onWorldReady?: (chunksData: Map<string, Uint8Array>) => void;
+}
+
+export const useWorld = ({
+  sceneRef,
+  materialsRef,
+  blockGeometryRef,
+  renderDistanceRef,
+  fancyLeavesRef,
+  seedRef,
+  worldId,
+  onWorldReady
+}: WorldOptions) => {
   const objectsRef = useRef<THREE.Object3D[]>([]);
   const isReadyRef = useRef(false);
   const isStorageLoadingRef = useRef(true);
@@ -43,25 +54,30 @@ export const useWorld = (
   const nextTaskIdRef = useRef<number>(0);
   const dbRef = useRef<IDBDatabase | null>(null);
 
+  const clearWorldData = useCallback(() => {
+    worldDataRef.current.clear();
+    chunksDataRef.current.clear();
+    chunkCacheRef.current.clear();
+    loadedChunksRef.current.clear();
+    
+    chunkMeshesRef.current.forEach(group => {
+      sceneRef.current?.remove(group);
+      group.children.forEach(child => {
+        if (child instanceof THREE.Mesh) child.geometry.dispose();
+      });
+    });
+    
+    chunkMeshesRef.current.clear();
+    playerChunkRef.current = { x: Infinity, z: Infinity };
+  }, [sceneRef]);
+
   useEffect(() => {
     const setup = async () => {
       try {
         const db = await initDB();
         dbRef.current = db;
         
-        // Clear current world data before loading new world
-        worldDataRef.current.clear();
-        chunksDataRef.current.clear();
-        chunkCacheRef.current.clear();
-        loadedChunksRef.current.clear();
-        chunkMeshesRef.current.forEach(group => {
-            sceneRef.current?.remove(group);
-            group.children.forEach(child => {
-                if (child instanceof THREE.Mesh) child.geometry.dispose();
-            });
-        });
-        chunkMeshesRef.current.clear();
-        playerChunkRef.current = { x: Infinity, z: Infinity };
+        clearWorldData();
 
         const savedData = await loadAllBlocks(db, worldId);
         savedData.forEach((type, key) => {

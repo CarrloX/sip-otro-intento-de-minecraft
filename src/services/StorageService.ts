@@ -104,7 +104,7 @@ export const updateWorldLastPlayed = (db: IDBDatabase, id: string, playerPositio
             resolve();
         };
 
-        request.onerror = () => reject(request.error);
+        request.onerror = () => reject(new Error(request.error?.message || 'Failed to update world last played'));
     });
 };
 
