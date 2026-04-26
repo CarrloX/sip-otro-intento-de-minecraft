@@ -252,6 +252,97 @@ const placeLeaf = (hx: number, hy: number, hz: number, chunkData: Uint8Array) =>
   }
 };
 
+const generateTrunk = (lx: number, y: number, lz: number, height: number, chunkData: Uint8Array) => {
+  for (let i = 0; i < height; i++) {
+    const idx = getBlockIndex(lx, y + i, lz);
+    if (idx !== -1) {
+        chunkData[idx] = 4; // Log
+    }
+  }
+};
+
+interface TreeContext {
+  gx: number;
+  gz: number;
+  lx: number;
+  lz: number;
+  chunkData: Uint8Array;
+}
+
+const placeOakLeafLayer = (hy: number, radius: number, dy: number, ctx: TreeContext) => {
+    const { lx, lz, gx, gz, chunkData } = ctx;
+    for (let hx = lx - radius; hx <= lx + radius; hx++) {
+        for (let hz = lz - radius; hz <= lz + radius; hz++) {
+            const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
+            const cornerSeed = pseudoRandom(hx * 1.1 + gx, hz * 1.2 + gz + hy);
+            
+            const isCorner = radius === 2 && dist === 4 && cornerSeed < 0.5;
+            const isTopEdge = dy === 1 && dist === 2;
+            
+            if (!isCorner && !isTopEdge) {
+                placeLeaf(hx, hy, hz, chunkData);
+            }
+        }
+    }
+};
+
+const generateOakLeaves = (y: number, height: number, ctx: TreeContext) => {
+  for (let hy = y + height - 3; hy <= y + height + 1; hy++) {
+      const dy = hy - (y + height);
+      let radius = dy <= -1 ? 2 : 1;
+      if (dy === 1) radius = 1;
+      placeOakLeafLayer(hy, radius, dy, ctx);
+  }
+};
+
+const placePineLeafLayer = (hy: number, radius: number, ctx: TreeContext) => {
+    const { lx, lz, chunkData } = ctx;
+    for (let hx = lx - radius; hx <= lx + radius; hx++) {
+        for (let hz = lz - radius; hz <= lz + radius; hz++) {
+            const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
+            if (radius === 2 && dist >= 3) continue; 
+            if (radius === 1 && dist >= 2) continue; 
+            
+            placeLeaf(hx, hy, hz, chunkData);
+        }
+    }
+};
+
+const generatePineLeaves = (y: number, height: number, ctx: TreeContext) => {
+  const leafStart = Math.max(1, Math.floor(height / 2));
+  for (let hy = y + leafStart; hy <= y + height + 1; hy++) {
+      const dy = (y + height + 1) - hy; 
+      const radius = (dy % 2 === 0) ? 1 : 2; 
+      placePineLeafLayer(hy, radius, ctx);
+  }
+};
+
+const placeBushyLeafColumn = (hx: number, hy: number, centerY: number, radius: number, ctx: TreeContext) => {
+    const { lx, lz, chunkData } = ctx;
+    for (let hz = lz - 3; hz <= lz + 3; hz++) {
+        const dx = hx - lx;
+        const dy = hy - centerY;
+        const dz = hz - lz;
+        const distSq = dx*dx + dy*dy + dz*dz;
+        
+        const edgeNoise = pseudoRandom(hx * 1.5, hz * 1.5 + hy) * 2;
+        if (distSq < radius * radius + edgeNoise) {
+            placeLeaf(hx, hy, hz, chunkData);
+        }
+    }
+};
+
+const generateBushyLeaves = (y: number, height: number, ctx: TreeContext) => {
+  const radius = 2.5;
+  const centerY = y + height - 1;
+  const { lx } = ctx;
+  for (let hx = lx - 3; hx <= lx + 3; hx++) {
+      for (let hy = centerY - 3; hy <= centerY + 3; hy++) {
+          placeBushyLeafColumn(hx, hy, centerY, radius, ctx);
+      }
+  }
+};
+
 export const generateTree = (
   gx: number,
   gz: number,
@@ -260,81 +351,21 @@ export const generateTree = (
   lz: number,
   chunkData: Uint8Array
 ) => {
+  const ctx: TreeContext = { gx, gz, lx, lz, chunkData };
   const rand1 = pseudoRandom(gx * 1.3, gz * 1.7);
   const rand2 = pseudoRandom(gx * 2.1, gz * 0.9);
   
-  // Height between 4 and 7
   const height = 4 + Math.floor(rand1 * 4);
-  
-  // Choose tree shape based on rand2
-  // Shape 0: Standard oak (wider bottom, smaller top)
-  // Shape 1: Tall pine-like (narrow, starts lower)
-  // Shape 2: Bushy (short, wide leaves)
   const shape = Math.floor(rand2 * 3);
 
-  // Generate Trunk
-  for (let i = 0; i < height; i++) {
-    const idx = getBlockIndex(lx, y + i, lz);
-    if (idx !== -1) {
-        chunkData[idx] = 4; // Log
-    }
-  }
+  generateTrunk(lx, y, lz, height, chunkData);
   
-  // Generate Leaves
   if (shape === 0) {
-      // Standard Minecraft Oak
-      for (let hy = y + height - 3; hy <= y + height + 1; hy++) {
-          const dy = hy - (y + height);
-          let radius = dy <= -1 ? 2 : 1;
-          if (dy === 1) radius = 1;
-
-          for (let hx = lx - radius; hx <= lx + radius; hx++) {
-              for (let hz = lz - radius; hz <= lz + radius; hz++) {
-                  const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
-                  const cornerSeed = pseudoRandom(hx * 1.1 + gx, hz * 1.2 + gz + hy);
-                  if (radius === 2 && dist === 4 && cornerSeed < 0.5) continue;
-                  if (dy === 1 && dist === 2) continue;
-
-                  placeLeaf(hx, hy, hz, chunkData);
-              }
-          }
-      }
+      generateOakLeaves(y, height, ctx);
   } else if (shape === 1) {
-      // Pine tree (tall and narrow)
-      const leafStart = Math.max(1, Math.floor(height / 2));
-      for (let hy = y + leafStart; hy <= y + height + 1; hy++) {
-          const dy = (y + height + 1) - hy; 
-          const radius = (dy % 2 === 0) ? 1 : 2; 
-          
-          for (let hx = lx - radius; hx <= lx + radius; hx++) {
-              for (let hz = lz - radius; hz <= lz + radius; hz++) {
-                  const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
-                  if (radius === 2 && dist >= 3) continue; 
-                  if (radius === 1 && dist >= 2) continue; 
-                  
-                  placeLeaf(hx, hy, hz, chunkData);
-              }
-          }
-      }
+      generatePineLeaves(y, height, ctx);
   } else {
-      // Bushy tree (spherical)
-      const radius = 2.5;
-      const centerY = y + height - 1;
-      for (let hx = lx - 3; hx <= lx + 3; hx++) {
-          for (let hy = centerY - 3; hy <= centerY + 3; hy++) {
-              for (let hz = lz - 3; hz <= lz + 3; hz++) {
-                  const dx = hx - lx;
-                  const dy = hy - centerY;
-                  const dz = hz - lz;
-                  const distSq = dx*dx + dy*dy + dz*dz;
-                  
-                  const edgeNoise = pseudoRandom(hx * 1.5, hz * 1.5 + hy) * 2;
-                  if (distSq < radius * radius + edgeNoise) {
-                      placeLeaf(hx, hy, hz, chunkData);
-                  }
-              }
-          }
-      }
+      generateBushyLeaves(y, height, ctx);
   }
 };
 

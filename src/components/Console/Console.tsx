@@ -45,11 +45,11 @@ const Console: React.FC<ConsoleProps> = ({ isOpen, onClose, onCommand }) => {
     };
 
     if (isOpen) {
-      window.addEventListener('keydown', handleGlobalKeyDown);
+      globalThis.addEventListener('keydown', handleGlobalKeyDown);
     }
 
     return () => {
-      window.removeEventListener('keydown', handleGlobalKeyDown);
+      globalThis.removeEventListener('keydown', handleGlobalKeyDown);
     };
   }, [isOpen, onClose]);
 

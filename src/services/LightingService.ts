@@ -127,7 +127,7 @@ const setupStars = (scene: THREE.Scene) => {
     size: 1.5,
     sizeAttenuation: false,
     transparent: true,
-    opacity: 0.0, // Invisible by default
+    opacity: 0, // Invisible by default
     fog: false // Not affected by fog
   });
   
@@ -312,14 +312,7 @@ export const setupLighting = (scene: THREE.Scene, initialRenderDistance: number 
   return { ambientLight, sunLight, sunMesh, moonLight, moonMesh, cloudGroup, starsPoints };
 };
 
-export const updateLighting = (
-  scene: THREE.Scene,
-  system: LightingSystem,
-  time: number,
-  playerPosition: THREE.Vector3
-) => {
-  // Push the sun and moon far beyond the clouds (130) and terrain. 
-  // The camera Far plane is forced to 512 in useMinecraft.ts to support this.
+const updateCelestialBodiesOrbit = (system: LightingSystem, time: number, playerPosition: THREE.Vector3) => {
   const orbitRadius = 450; 
 
   const sunX = Math.cos(time) * orbitRadius;
@@ -337,14 +330,14 @@ export const updateLighting = (
   system.moonLight.target.position.copy(playerPosition);
   system.moonMesh.position.copy(system.moonLight.position);
   system.moonMesh.lookAt(playerPosition);
+};
 
-  const skyColor = getSkyColor(time);
+const updateAtmosphere = (scene: THREE.Scene, system: LightingSystem, time: number, skyColor: THREE.Color, isDay: boolean) => {
   scene.background = skyColor;
   if (scene.fog) {
       scene.fog.color = skyColor;
   }
   
-  const isDay = Math.sin(time) > 0;
   system.sunLight.intensity = isDay ? Math.min(1.2, Math.sin(time) * 1.5) : 0;
   system.moonLight.intensity = isDay ? 0 : Math.min(0.35, Math.abs(Math.sin(time)) * 0.5);
   
@@ -363,46 +356,52 @@ export const updateLighting = (
       if (!system.moonLight.castShadow) system.moonLight.castShadow = true;
       system.moonLight.shadow.camera.updateProjectionMatrix();
   }
+};
 
-  // === Update Stars ===
+const updateStars = (system: LightingSystem, time: number, playerPosition: THREE.Vector3, isDay: boolean) => {
   if (system.starsPoints) {
-      const starOpacity = isDay ? 0 : Math.min(1.0, Math.abs(Math.sin(time)) * 2.0);
+      const starOpacity = isDay ? 0 : Math.min(1, Math.abs(Math.sin(time)) * 2);
       (system.starsPoints.material as THREE.PointsMaterial).opacity = starOpacity;
       
-      // Center stars on player and rotate them with time
       system.starsPoints.position.copy(playerPosition);
-      // Offset the rotation so stars don't align perfectly with the sun/moon in a weird way,
-      // and make them rotate much slower as requested.
       system.starsPoints.rotation.z = time * 0.05; 
   }
+};
 
-  // === Update Clouds ===
-  const W_WORLD = 128 * 8; // W (128) * SCALE (8)
+const updateClouds = (system: LightingSystem, time: number, playerPosition: THREE.Vector3, skyColor: THREE.Color, isDay: boolean) => {
+  const W_WORLD = 128 * 8; 
   const mod = (n: number, m: number) => ((n % m) + m) % m;
   
-  let cloudColor: THREE.Color;
-  if (isDay) {
-      // Lerp towards white at noon, use sky color at sunrise/sunset
-      cloudColor = skyColor.clone().lerp(new THREE.Color(0xffffff), Math.sin(time));
-  } else {
-      // Lerp towards a dark bluish-gray at midnight
-      cloudColor = skyColor.clone().lerp(new THREE.Color(0x1a1a2e), -Math.sin(time));
-  }
+  const cloudColor = isDay 
+      ? skyColor.clone().lerp(new THREE.Color(0xffffff), Math.sin(time))
+      : skyColor.clone().lerp(new THREE.Color(0x1a1a2e), -Math.sin(time));
 
   system.cloudGroup.children.forEach((mesh: any) => {
-      if (mesh.material && mesh.material.color) {
+      if (mesh.material?.color) {
           mesh.material.color.copy(cloudColor);
       }
   });
   
-  // Drift slowly towards positive X and Z
   const scrollBaseX = playerPosition.x - time * 6; 
   const scrollBaseZ = playerPosition.z - time * 3;
   
-  // We snap the group's "origin" relative to the W_WORLD grid anchored behind the player's view
-  // so the player is always inside the safe center of the four duplicating cloud meshes.
   const anchorX = playerPosition.x - mod(scrollBaseX, W_WORLD);
   const anchorZ = playerPosition.z - mod(scrollBaseZ, W_WORLD);
   
   system.cloudGroup.position.set(anchorX, 130, anchorZ);
+};
+
+export const updateLighting = (
+  scene: THREE.Scene,
+  system: LightingSystem,
+  time: number,
+  playerPosition: THREE.Vector3
+) => {
+  const isDay = Math.sin(time) > 0;
+  const skyColor = getSkyColor(time);
+
+  updateCelestialBodiesOrbit(system, time, playerPosition);
+  updateAtmosphere(scene, system, time, skyColor, isDay);
+  updateStars(system, time, playerPosition, isDay);
+  updateClouds(system, time, playerPosition, skyColor, isDay);
 };

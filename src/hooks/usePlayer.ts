@@ -44,6 +44,24 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     return false;
   }, [chunksDataRef]);
 
+  const checkAxisCollision = useCallback((camera: THREE.PerspectiveCamera, axis: 'x' | 'z', delta: number, originalPos: THREE.Vector3, isCrouching: boolean) => {
+    camera.position[axis] += delta;
+    if (checkCollision(camera.position)) {
+      camera.position[axis] = originalPos[axis];
+      return true;
+    } 
+    
+    if (isCrouching && canJump.current) {
+      const testPos = camera.position.clone();
+      testPos.y -= 0.2;
+      if (!checkCollision(testPos)) {
+         camera.position[axis] = originalPos[axis];
+         return true;
+      }
+    }
+    return false;
+  }, [checkCollision]);
+
   const applyVerticalForces = useCallback((actions: Record<string, boolean>, isSprinting: boolean, isFlying: boolean) => {
     if (isFlying) {
       const flySpeed = 50;
@@ -98,8 +116,10 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     if (isFlying) {
       baseSpeed = 60;
       multiplier = isSprinting ? 3 : 1;
-    } else {
-      multiplier = isSprinting ? 1.3 : (isCrouching ? 0.35 : 1);
+    } else if (isSprinting) {
+      multiplier = 1.3;
+    } else if (isCrouching) {
+      multiplier = 0.35;
     }
 
     const speed = baseSpeed * multiplier;
@@ -122,66 +142,32 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     const moveX = -velocity.current.x * PHYSICS_STEP;
     const moveZ = -velocity.current.z * PHYSICS_STEP;
     
-    // Guardar posicion original
     const originalPos = camera.position.clone();
     
-    // Calcular posicion objetivo a partir del movimiento local de la camara
     controls.moveRight(moveX);
     controls.moveForward(moveZ);
     const targetPos = camera.position.clone();
     
-    // Obtener los deltas globales
     const deltaX = targetPos.x - originalPos.x;
     const deltaZ = targetPos.z - originalPos.z;
 
-    // Resetear a la posicion original
     camera.position.copy(originalPos);
 
-    // Mover y probar en el eje X global independientemente
-    camera.position.x += deltaX;
-    let collidedX = false;
-    if (checkCollision(camera.position)) {
-      camera.position.x = originalPos.x;
-      collidedX = true;
-    } else if (isCrouching && canJump.current) {
-      const testPos = camera.position.clone();
-      testPos.y -= 0.2;
-      if (!checkCollision(testPos)) {
-         camera.position.x = originalPos.x;
-         collidedX = true;
-      }
-    }
+    const collidedX = checkAxisCollision(camera, 'x', deltaX, originalPos, isCrouching);
+    const collidedZ = checkAxisCollision(camera, 'z', deltaZ, originalPos, isCrouching);
 
-    // Mover y probar en el eje Z global independientemente
-    camera.position.z += deltaZ;
-    let collidedZ = false;
-    if (checkCollision(camera.position)) {
-      camera.position.z = originalPos.z;
-      collidedZ = true;
-    } else if (isCrouching && canJump.current) {
-      const testPos = camera.position.clone();
-      testPos.y -= 0.2;
-      if (!checkCollision(testPos)) {
-         camera.position.z = originalPos.z;
-         collidedZ = true;
-      }
-    }
-
-    // Lógica de Salto Automático
     if ((collidedX || collidedZ) && autoJumpEnabledRef?.current && moveForward.current && canJump.current && !isCrouching) {
         const testPos = camera.position.clone();
-        // Intentar ver si moviéndonos en la dirección bloqueada y subiendo, hay espacio libre
         if (collidedX) testPos.x += deltaX;
         if (collidedZ) testPos.z += deltaZ;
-        testPos.y += 1.2; // Altura mínima para superar 1 bloque
+        testPos.y += 1.2;
 
         if (!checkCollision(testPos)) {
-            // El bloque de arriba está libre, realizar salto automático
             velocity.current.y += isSprintingRef.current ? 8.8 : 8;
             canJump.current = false;
         }
     }
-  }, [checkCollision, autoJumpEnabledRef]);
+  }, [checkCollision, autoJumpEnabledRef, checkAxisCollision]);
 
   /**
    * Handles a single 1/60s physics tick.

@@ -1,7 +1,7 @@
 type CommandCallback = (...args: string[]) => string | void;
 
 class CommandService {
-  private commands: Map<string, CommandCallback> = new Map();
+  private readonly commands: Map<string, CommandCallback> = new Map();
 
   register(command: string, callback: CommandCallback) {
     this.commands.set(command.toLowerCase(), callback);

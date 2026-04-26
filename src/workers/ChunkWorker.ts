@@ -138,55 +138,74 @@ class ChunkBuilder {
 
   private generateTreeLeaves(gx: number, gz: number, lx: number, y: number, lz: number, height: number, shape: number) {
       if (shape === 0) {
-          for (let hy = y + height - 3; hy <= y + height + 1; hy++) {
-              const dy = hy - (y + height);
-              let radius = dy <= -1 ? 2 : 1;
-              if (dy === 1) radius = 1;
-
-              for (let hx = lx - radius; hx <= lx + radius; hx++) {
-                  for (let hz = lz - radius; hz <= lz + radius; hz++) {
-                      const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
-                      const cornerSeed = pseudoRandom(hx * 1.1 + gx, hz * 1.2 + gz + hy);
-                      if (radius === 2 && dist === 4 && cornerSeed < 0.5) continue;
-                      if (dy === 1 && dist === 2) continue;
-
-                      this.placePaddedLeaf(hx, hy, hz);
-                  }
-              }
-          }
+          this.generateOakLeaves(gx, gz, lx, y, lz, height);
       } else if (shape === 1) {
-          const leafStart = Math.max(1, Math.floor(height / 2));
-          for (let hy = y + leafStart; hy <= y + height + 1; hy++) {
-              const dy = (y + height + 1) - hy; 
-              const radius = (dy % 2 === 0) ? 1 : 2; 
-              
-              for (let hx = lx - radius; hx <= lx + radius; hx++) {
-                  for (let hz = lz - radius; hz <= lz + radius; hz++) {
-                      const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
-                      if (radius === 2 && dist >= 3) continue; 
-                      if (radius === 1 && dist >= 2) continue; 
-                      
-                      this.placePaddedLeaf(hx, hy, hz);
-                  }
-              }
-          }
+          this.generatePineLeaves(lx, y, lz, height);
       } else {
-          const radius = 2.5;
-          const centerY = y + height - 1;
-          for (let hx = lx - 3; hx <= lx + 3; hx++) {
-              for (let hy = centerY - 3; hy <= centerY + 3; hy++) {
-                  for (let hz = lz - 3; hz <= lz + 3; hz++) {
-                      const dx = hx - lx;
-                      const dy = hy - centerY;
-                      const dz = hz - lz;
-                      const distSq = dx*dx + dy*dy + dz*dz;
-                      
-                      const edgeNoise = pseudoRandom(hx * 1.5, hz * 1.5 + hy) * 2;
-                      if (distSq < radius * radius + edgeNoise) {
-                          this.placePaddedLeaf(hx, hy, hz);
-                      }
-                  }
-              }
+          this.generateBushyLeaves(lx, y, lz, height);
+      }
+  }
+
+  private generateOakLeaves(gx: number, gz: number, lx: number, y: number, lz: number, height: number) {
+      for (let hy = y + height - 3; hy <= y + height + 1; hy++) {
+          const dy = hy - (y + height);
+          let radius = dy <= -1 ? 2 : 1;
+          if (dy === 1) radius = 1;
+          this.placeOakLeafLayer(hy, lx, lz, gx, gz, radius, dy);
+      }
+  }
+
+  private placeOakLeafLayer(hy: number, lx: number, lz: number, gx: number, gz: number, radius: number, dy: number) {
+      for (let hx = lx - radius; hx <= lx + radius; hx++) {
+          for (let hz = lz - radius; hz <= lz + radius; hz++) {
+              const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
+              const cornerSeed = pseudoRandom(hx * 1.1 + gx, hz * 1.2 + gz + hy);
+              if (radius === 2 && dist === 4 && cornerSeed < 0.5) continue;
+              if (dy === 1 && dist === 2) continue;
+              this.placePaddedLeaf(hx, hy, hz);
+          }
+      }
+  }
+
+  private generatePineLeaves(lx: number, y: number, lz: number, height: number) {
+      const leafStart = Math.max(1, Math.floor(height / 2));
+      for (let hy = y + leafStart; hy <= y + height + 1; hy++) {
+          const dy = (y + height + 1) - hy; 
+          const radius = (dy % 2 === 0) ? 1 : 2; 
+          this.placePineLeafLayer(hy, lx, lz, radius);
+      }
+  }
+
+  private placePineLeafLayer(hy: number, lx: number, lz: number, radius: number) {
+      for (let hx = lx - radius; hx <= lx + radius; hx++) {
+          for (let hz = lz - radius; hz <= lz + radius; hz++) {
+              const dist = Math.abs(hx - lx) + Math.abs(hz - lz);
+              if (radius === 2 && dist >= 3) continue; 
+              if (radius === 1 && dist >= 2) continue; 
+              this.placePaddedLeaf(hx, hy, hz);
+          }
+      }
+  }
+
+  private generateBushyLeaves(lx: number, y: number, lz: number, height: number) {
+      const radius = 2.5;
+      const centerY = y + height - 1;
+      for (let hx = lx - 3; hx <= lx + 3; hx++) {
+          for (let hy = centerY - 3; hy <= centerY + 3; hy++) {
+              this.placeBushyLeafColumn(hx, hy, lx, lz, centerY, radius);
+          }
+      }
+  }
+
+  private placeBushyLeafColumn(hx: number, hy: number, lx: number, lz: number, centerY: number, radius: number) {
+      for (let hz = lz - 3; hz <= lz + 3; hz++) {
+          const dx = hx - lx;
+          const dy = hy - centerY;
+          const dz = hz - lz;
+          const distSq = dx*dx + dy*dy + dz*dz;
+          const edgeNoise = pseudoRandom(hx * 1.5, hz * 1.5 + hy) * 2;
+          if (distSq < radius * radius + edgeNoise) {
+              this.placePaddedLeaf(hx, hy, hz);
           }
       }
   }

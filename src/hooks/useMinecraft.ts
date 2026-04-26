@@ -153,7 +153,6 @@ export const useMinecraft = ({
     if (!isWorldReadyRef.current && cameraRef.current) {
         const px = Math.floor(cameraRef.current.position.x);
         const pz = Math.floor(cameraRef.current.position.z);
-        const currentY = cameraRef.current.position.y;
         
         let highestY = Y_MIN - 1;
         for (let y = Y_MAX; y >= Y_MIN; y--) {
@@ -270,10 +269,10 @@ export const useMinecraft = ({
 
     commandService.register('/tp', (x?: string, y?: string, z?: string) => {
         if (x !== undefined && y !== undefined && z !== undefined) {
-            const px = parseFloat(x);
-            const py = parseFloat(y);
-            const pz = parseFloat(z);
-            if (!isNaN(px) && !isNaN(py) && !isNaN(pz)) {
+            const px = Number.parseFloat(x);
+            const py = Number.parseFloat(y);
+            const pz = Number.parseFloat(z);
+            if (!Number.isNaN(px) && !Number.isNaN(py) && !Number.isNaN(pz)) {
                 camera.position.set(px, py, pz);
                 return `Teleported to ${px} ${py} ${pz}`;
             }

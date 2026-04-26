@@ -22,9 +22,13 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
 
     if (newType !== -1 && newType !== currentBlockType) {
       setCurrentBlockType(newType);
-      onBlockChange(newType);
     }
-  }, [actions, onBlockChange, currentBlockType]);
+  }, [actions, currentBlockType]);
+
+  // Sync with parent state whenever currentBlockType changes
+  useEffect(() => {
+    onBlockChange(currentBlockType);
+  }, [currentBlockType, onBlockChange]);
 
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
@@ -34,8 +38,6 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
         let next = prev + (e.deltaY > 0 ? 1 : -1);
         if (next > 6) next = 1;
         if (next < 1) next = 6;
-        
-        onBlockChange(next);
         return next;
       });
     };
@@ -58,7 +60,6 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
           title={`${num} - Bloque`}
           onClick={() => {
             setCurrentBlockType(num);
-            onBlockChange(num);
           }}
         ></button>
       ))}
