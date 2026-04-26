@@ -154,24 +154,24 @@ export const useMinecraft = ({
         const px = Math.floor(cameraRef.current.position.x);
         const pz = Math.floor(cameraRef.current.position.z);
         
-        let highestY = Y_MIN - 1;
-        for (let y = Y_MAX; y >= Y_MIN; y--) {
+        let safeY = 30; // Default fallback
+        
+        // Find the highest solid block that has at least 2 blocks of air above it
+        for (let y = Y_MAX - 2; y >= Y_MIN; y--) {
             const block = getGlobalBlockType(px, y, pz, chunksData);
-            if (block !== 0 && block !== 5) {
-                highestY = y;
-                break;
+            if (block !== 0) { // Found a solid block
+                const above1 = getGlobalBlockType(px, y + 1, pz, chunksData);
+                const above2 = getGlobalBlockType(px, y + 2, pz, chunksData);
+                
+                // If there's enough head room (at least 2 blocks of air)
+                if (above1 === 0 && above2 === 0) {
+                    safeY = y + 2.2;
+                    break;
+                }
             }
         }
         
-        if (highestY > Y_MIN - 1) {
-            // Player height is ~1.6. Block top is at highestY + 0.5.
-            // Eyes should be at highestY + 0.5 + 1.6 = highestY + 2.1.
-            // We use highestY + 2.2 to be slightly above the ground and avoid embedding.
-            const safeY = highestY + 2.2;
-            
-            // Always set the camera to the safe Y so they don't fall from the sky
-            cameraRef.current.position.y = safeY;
-        }
+        cameraRef.current.position.y = safeY;
     }
     isWorldReadyRef.current = true;
     onWorldReady?.();
@@ -225,6 +225,7 @@ export const useMinecraft = ({
     renderer.setPixelRatio(globalThis.devicePixelRatio);
     renderer.setSize(globalThis.innerWidth, globalThis.innerHeight);
     renderer.shadowMap.enabled = enableShadows;
+    renderer.shadowMap.type = THREE.PCFShadowMap; 
     renderer.toneMapping = THREE.LinearToneMapping;
     renderer.toneMappingExposure = brightness / 50;
     mountNode.appendChild(renderer.domElement);

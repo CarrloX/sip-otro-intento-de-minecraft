@@ -243,7 +243,23 @@ export const useWorld = (
         chunkMesh.add(tempMesh); 
     }
 
-    requestChunkMesh(Math.floor(rx / CHUNK_SIZE), Math.floor(rz / CHUNK_SIZE), loadedChunksRef.current.get(chunkId) || 0);
+    // Invalidate cache for this chunk
+    chunkCacheRef.current.delete(chunkId);
+
+    const cx = Math.floor(rx / CHUNK_SIZE);
+    const cz = Math.floor(rz / CHUNK_SIZE);
+    const lod = loadedChunksRef.current.get(chunkId) || 0;
+    
+    requestChunkMesh(cx, cz, lod);
+
+    // Refresh neighbors if on border
+    const lx = ((rx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const lz = ((rz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+
+    if (lx === 0) requestChunkMesh(cx - 1, cz, loadedChunksRef.current.get(`${cx-1},${cz}`) || 0);
+    if (lx === CHUNK_SIZE - 1) requestChunkMesh(cx + 1, cz, loadedChunksRef.current.get(`${cx+1},${cz}`) || 0);
+    if (lz === 0) requestChunkMesh(cx, cz - 1, loadedChunksRef.current.get(`${cx},${cz-1}`) || 0);
+    if (lz === CHUNK_SIZE - 1) requestChunkMesh(cx, cz + 1, loadedChunksRef.current.get(`${cx},${cz+1}`) || 0);
   }, [requestChunkMesh, blockGeometryRef, materialsRef]);
 
   const removeBlockFaces = useCallback((arr: Float32Array, nArr: Float32Array, rx: number, ry: number, rz: number): boolean => {
@@ -319,7 +335,23 @@ export const useWorld = (
     const chunkMesh = chunkMeshesRef.current.get(chunkId);
     hideBlockInMesh(chunkMesh, rx, ry, rz, blockGeometryRef.current);
 
-    requestChunkMesh(Math.floor(rx / CHUNK_SIZE), Math.floor(rz / CHUNK_SIZE), loadedChunksRef.current.get(chunkId) || 0);
+    // Invalidate cache for this chunk
+    chunkCacheRef.current.delete(chunkId);
+
+    const cx = Math.floor(rx / CHUNK_SIZE);
+    const cz = Math.floor(rz / CHUNK_SIZE);
+    const lod = loadedChunksRef.current.get(chunkId) || 0;
+
+    requestChunkMesh(cx, cz, lod);
+
+    // Refresh neighbors if on border
+    const lx = ((rx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const lz = ((rz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+
+    if (lx === 0) requestChunkMesh(cx - 1, cz, loadedChunksRef.current.get(`${cx-1},${cz}`) || 0);
+    if (lx === CHUNK_SIZE - 1) requestChunkMesh(cx + 1, cz, loadedChunksRef.current.get(`${cx+1},${cz}`) || 0);
+    if (lz === 0) requestChunkMesh(cx, cz - 1, loadedChunksRef.current.get(`${cx},${cz-1}`) || 0);
+    if (lz === CHUNK_SIZE - 1) requestChunkMesh(cx, cz + 1, loadedChunksRef.current.get(`${cx},${cz+1}`) || 0);
   }, [requestChunkMesh, blockGeometryRef, hideBlockInMesh]);
 
   const unloadChunk = useCallback((cx: number, cz: number) => {

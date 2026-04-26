@@ -56,15 +56,17 @@ const setupSun = (scene: THREE.Scene) => {
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.width = 2048; 
   sunLight.shadow.mapSize.height = 2048;
-  sunLight.shadow.camera.near = 0.5;
-  sunLight.shadow.camera.far = 600; // Extend shadow render distance to 600 to match orbitRadius (450)
+  sunLight.shadow.camera.near = 350; // Increased from 0.5 to concentrate depth precision near the scene
+  sunLight.shadow.camera.far = 550; // Tightened range (orbitRadius is 450)
   
-  const shadowCamSize = 64; // High span to cover the playing area
+  const shadowCamSize = 64; 
   sunLight.shadow.camera.left = -shadowCamSize;
   sunLight.shadow.camera.right = shadowCamSize;
   sunLight.shadow.camera.top = shadowCamSize;
   sunLight.shadow.camera.bottom = -shadowCamSize;
-  sunLight.shadow.bias = -0.0005; 
+  sunLight.shadow.bias = -0.00005; // Extremely small bias due to high precision
+  sunLight.shadow.normalBias = 0.04; // Slightly increased to compensate for smaller bias
+  sunLight.shadow.radius = 2; // Smooth edges via radius instead of deprecated PCFSoftShadowMap
   scene.add(sunLight);
   scene.add(sunLight.target); 
 
@@ -81,15 +83,17 @@ const setupMoon = (scene: THREE.Scene) => {
   moonLight.castShadow = false; // Toggled dynamically
   moonLight.shadow.mapSize.width = 2048; 
   moonLight.shadow.mapSize.height = 2048;
-  moonLight.shadow.camera.near = 0.5;
-  moonLight.shadow.camera.far = 600; 
+  moonLight.shadow.camera.near = 350;
+  moonLight.shadow.camera.far = 550; 
   
   const shadowCamSize = 64; 
   moonLight.shadow.camera.left = -shadowCamSize;
   moonLight.shadow.camera.right = shadowCamSize;
   moonLight.shadow.camera.top = shadowCamSize;
   moonLight.shadow.camera.bottom = -shadowCamSize;
-  moonLight.shadow.bias = -0.0005; 
+  moonLight.shadow.bias = -0.00005; 
+  moonLight.shadow.normalBias = 0.04; 
+  moonLight.shadow.radius = 2; 
   scene.add(moonLight);
   scene.add(moonLight.target);
 
