@@ -69,28 +69,32 @@ export const simulateRandomTicks = (
     // Our chunks are 16x16x320 (height). That's 20 sub-chunks. 
     // 3 * 20 = 60 ticks per chunk per tick.
     const TICKS_PER_CHUNK = 60 * tickMultiplier; 
+    const Y_HEIGHT = Y_MAX - Y_MIN + 1; // 320
     
     for (let c = 0; c < loadedChunks.length; c++) {
         const chunkId = loadedChunks[c];
+        const chunkData = chunksData.get(chunkId);
+        if (!chunkData) continue;
+
         const commaIdx = chunkId.indexOf(',');
-        const cx = parseInt(chunkId.substring(0, commaIdx));
-        const cz = parseInt(chunkId.substring(commaIdx + 1));
+        const cx = parseInt(chunkId.substring(0, commaIdx)) * CHUNK_SIZE;
+        const cz = parseInt(chunkId.substring(commaIdx + 1)) * CHUNK_SIZE;
 
         for (let i = 0; i < TICKS_PER_CHUNK; i++) {
-            const lx = Math.floor(Math.random() * CHUNK_SIZE);
-            const lz = Math.floor(Math.random() * CHUNK_SIZE);
-            const y = Math.floor(Math.random() * (Y_MAX - Y_MIN + 1)) + Y_MIN;
+            // Highly optimized random integer selection (Bitwise OR 0 is faster than Math.floor)
+            const lx = (Math.random() * 16) | 0;
+            const lz = (Math.random() * 16) | 0;
+            const indexY = (Math.random() * Y_HEIGHT) | 0;
 
-            const rx = cx * CHUNK_SIZE + lx;
-            const rz = cz * CHUNK_SIZE + lz;
-
-            const blockType = getGlobalBlockType(rx, y, rz, chunksData);
+            const idx = lx + (lz * 16) + (indexY * 256);
+            const blockType = chunkData[idx];
             
-            // If the block is not air, check if it has a tick behavior
-            if (blockType !== 0) {
+            // Fast exit: Ignore Air (0) and common inert blocks like Stone (3) to save Map lookups
+            if (blockType !== 0 && blockType !== 3) {
                 const behavior = tickBehaviors.get(blockType);
                 if (behavior) {
-                    behavior(rx, y, rz, chunksData, modifyBlock);
+                    const globalY = indexY + Y_MIN;
+                    behavior(cx + lx, globalY, cz + lz, chunksData, modifyBlock);
                 }
             }
         }
