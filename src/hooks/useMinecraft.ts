@@ -10,6 +10,7 @@ import { useInteraction } from './useInteraction';
 import { useWorld } from './useWorld';
 import { commandService } from '../services/CommandService';
 import { getGlobalBlockType, Y_MIN, Y_MAX } from '../services/WorldService';
+import { simulateRandomTicks } from '../services/SimulationService';
 
 const findSafeSpawnY = (px: number, pz: number, chunksData: Map<string, Uint8Array>): number => {
     let safeY = 30; // Default fallback
@@ -147,6 +148,7 @@ export const useMinecraft = ({
   const blockGeometryRef = useRef(new THREE.BoxGeometry(1, 1, 1));
   const prevTime = useRef<number>(0);
   const lastRenderTime = useRef<number>(0);
+  const lastSimulationTick = useRef<number>(0);
 
   // Initialize World Hook (Manages Chunks and Blocks)
   const fancyLeavesRef = useRef(fancyLeaves);
@@ -325,6 +327,23 @@ export const useMinecraft = ({
         return 'Usage: /tp <x> <y> <z>';
     });
 
+    commandService.register('/tick', (action?: string, value?: string) => {
+        if (action === 'advance') {
+            const steps = parseInt(value || '100');
+            if (!isNaN(steps) && steps > 0) {
+                const loadedChunks = Array.from(world.chunksDataRef.current.keys());
+                simulateRandomTicks(loadedChunks, world.chunksDataRef.current, world.addBlock, steps);
+                
+                // Advance the visual time of day (1 tick = 0.05 seconds of delta time)
+                worldTime += steps * 0.05 * TIME_SPEED;
+
+                return `Advanced simulation by ${steps} ticks.`;
+            }
+            return 'Usage: /tick advance <amount>';
+        }
+        return 'Usage: /tick advance <amount>';
+    });
+
     const handleMouseDown = (e: MouseEvent) => interaction.handleMouseDown(e);
     document.addEventListener('mousedown', handleMouseDown);
 
@@ -332,6 +351,7 @@ export const useMinecraft = ({
     lastFpsUpdate.current = performance.now();
     prevTime.current = performance.now();
     lastRenderTime.current = performance.now();
+    lastSimulationTick.current = performance.now();
 
     // 7. Animation Loop
     let animationId: number;
@@ -375,6 +395,13 @@ export const useMinecraft = ({
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in globalThis);
       
       if (controls.isLocked || isMobile) {
+        // Run background simulation (20 Ticks Per Second)
+        if (time - lastSimulationTick.current > 50) {
+            const loadedChunks = Array.from(world.chunksDataRef.current.keys());
+            simulateRandomTicks(loadedChunks, world.chunksDataRef.current, world.addBlock);
+            lastSimulationTick.current = time;
+        }
+
         // Delegate updates to specialized hooks
         if (isWorldReadyRef.current) {
           player.update(delta, camera, controls);
@@ -395,6 +422,9 @@ export const useMinecraft = ({
           camera.fov += (targetFov - camera.fov) * delta * 8;
           camera.updateProjectionMatrix();
         }
+
+        // Advance time only when game is active
+        worldTime += delta * TIME_SPEED;
       } else {
         highlighter.visible = false;
         hoveredBlockRef.current = null;
@@ -402,7 +432,6 @@ export const useMinecraft = ({
       
       // Manage chunks and update time/lighting even when unlocked/paused
       world.manageChunks(camera.position);
-      worldTime += delta * TIME_SPEED;
       updateLighting(scene, lightingSystem, worldTime, camera.position);
       
       prevTime.current = time;
@@ -426,6 +455,7 @@ export const useMinecraft = ({
       controls.removeEventListener('unlock', onUnlock);
       commandService.unregister('/time');
       commandService.unregister('/tp');
+      commandService.unregister('/tick');
       renderer.dispose();
       renderer.domElement.remove();
       world.chunksDataRef.current.clear();

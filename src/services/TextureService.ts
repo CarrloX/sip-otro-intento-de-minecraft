@@ -139,18 +139,14 @@ const getGenericPixel = (type: string, x: number, y: number, noiseGrid: Float32A
     return { r: modR, g: modG, b: modB, a: alpha };
 };
 
-export const generateAtlas = () => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 128; // 8 textures * 16px
-  canvas.height = 16;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('Failed to get 2D context');
-
+export const generateTextureArray = () => {
   const types = ['dirt', 'grass_top', 'stone', 'wood_side', 'wood_top', 'leaves', 'grass_side', 'sand'];
-  
+  const width = 16;
+  const height = 16;
+  const depth = types.length;
+  const data = new Uint8Array(width * height * depth * 4);
+
   types.forEach((type, index) => {
-    const imageData = context.createImageData(16, 16);
-    const data = imageData.data;
     const params = TEXTURE_PARAMS[type] || TEXTURE_PARAMS['dirt'];
     const noiseGrid = new Float32Array(256);
     for(let k=0; k<256; k++) noiseGrid[k] = Math.random();
@@ -175,35 +171,71 @@ export const generateAtlas = () => {
           pixel = getGenericPixel(type, x, y, noiseGrid, params);
         }
 
-        const i = (y * 16 + x) * 4;
+        // Invert Y for WebGL DataTexture (0 is bottom in WebGL, but 0 is top in our generation loop)
+        const ty = 15 - y;
+        const i = (index * width * height + ty * width + x) * 4;
         data[i] = Math.min(255, Math.max(0, pixel.r));
         data[i + 1] = Math.min(255, Math.max(0, pixel.g));
         data[i + 2] = Math.min(255, Math.max(0, pixel.b));
         data[i + 3] = pixel.a;
       }
     }
-    
-    context.putImageData(imageData, index * 16, 0);
   });
 
-  const texture = new THREE.CanvasTexture(canvas);
+  const texture = new THREE.DataArrayTexture(data, width, height, depth);
+  texture.format = THREE.RGBAFormat;
+  texture.type = THREE.UnsignedByteType;
+  texture.minFilter = THREE.NearestMipmapLinearFilter;
   texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
-  texture.generateMipmaps = false;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
   return texture;
 };
 
 export const createUnifiedMaterial = () => {
-  const atlasTexture = generateAtlas();
+  const arrayTexture = generateTextureArray();
   
-  // Al usar Geometria Voxel pura con UVs explícitas, ya no necesitamos hackear shaders de GPU
   const material = new THREE.MeshLambertMaterial({ 
-     map: atlasTexture,
-     vertexColors: true, // Enable per-vertex tinting for light levels
-     alphaTest: 0.5, // Enables cutout transparency for Fancy Leaves without depth-sorting bugs
-     transparent: false // Key: keep this false so Z-Buffer depth writes natively!
+     vertexColors: true,
+     alphaTest: 0.5,
+     transparent: false
   });
+
+  material.defines = { USE_UV: "" };
+
+  material.onBeforeCompile = (shader) => {
+      shader.uniforms.mapArray = { value: arrayTexture };
+
+      shader.vertexShader = `
+          attribute float texIndex;
+          varying float vTexIndex;
+          ${shader.vertexShader}
+      `;
+      shader.vertexShader = shader.vertexShader.replace(
+          '#include <uv_vertex>',
+          `
+          #include <uv_vertex>
+          vTexIndex = texIndex;
+          `
+      );
+
+      shader.fragmentShader = `
+          uniform highp sampler2DArray mapArray;
+          varying float vTexIndex;
+          ${shader.fragmentShader}
+      `;
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `
+          vec4 texColor = texture(mapArray, vec3(vUv, vTexIndex));
+          diffuseColor *= texColor;
+          `
+      );
+  };
 
   return material;
 };

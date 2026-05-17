@@ -106,11 +106,11 @@ export const useWorld = ({
       for (let i = 0; i < 4; i++) {
         const worker = new ChunkWorker();
         worker.onmessage = (e) => {
-           const { response, chunkData, posArray, normArray, uvArray, indArray, colorArray } = e.data;
+           const { response, chunkData, posArray, normArray, uvArray, texIndicesArray, indArray, colorArray } = e.data;
            const taskId = response.taskId;
            const callback = workerCallbacksRef.current.get(taskId);
            if (callback) {
-               callback({ response, chunkData, posArray, normArray, uvArray, indArray, colorArray });
+               callback({ response, chunkData, posArray, normArray, uvArray, texIndicesArray, indArray, colorArray });
                workerCallbacksRef.current.delete(taskId);
            }
         };
@@ -176,7 +176,7 @@ export const useWorld = ({
 
      const taskId = nextTaskIdRef.current++;
 
-     workerCallbacksRef.current.set(taskId, ({ response, chunkData, posArray, normArray, uvArray, indArray, colorArray }) => {
+     workerCallbacksRef.current.set(taskId, ({ response, chunkData, posArray, normArray, uvArray, texIndicesArray, indArray, colorArray }) => {
          if (targetChunksRef.current.get(chunkId) !== response.lodLevel) return;
 
          chunksDataRef.current.set(chunkId, chunkData);
@@ -196,6 +196,7 @@ export const useWorld = ({
          geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
          geometry.setAttribute('normal', new THREE.BufferAttribute(normArray, 3));
          geometry.setAttribute('uv', new THREE.BufferAttribute(uvArray, 2));
+         geometry.setAttribute('texIndex', new THREE.BufferAttribute(texIndicesArray, 1));
          geometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
          geometry.setIndex(new THREE.BufferAttribute(indArray, 1));
          

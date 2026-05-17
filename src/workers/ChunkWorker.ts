@@ -40,6 +40,7 @@ class ChunkBuilder {
   private readonly positions: number[] = [];
   private readonly normals: number[] = [];
   private readonly uvs: number[] = [];
+  private readonly texIndices: number[] = [];
   private readonly indices: number[] = [];
   private readonly colors: number[] = [];
 
@@ -98,6 +99,7 @@ class ChunkBuilder {
     const posArray = new Float32Array(this.positions);
     const normArray = new Float32Array(this.normals);
     const uvArray = new Float32Array(this.uvs);
+    const texIndicesArray = new Float32Array(this.texIndices);
     const indArray = new Uint32Array(this.indices);
     const colorArray = new Float32Array(this.colors);
     
@@ -109,7 +111,7 @@ class ChunkBuilder {
     return {
        response,
        chunkData: this.chunkData,
-       posArray, normArray, uvArray, indArray, colorArray
+       posArray, normArray, uvArray, texIndicesArray, indArray, colorArray
     };
   }
 
@@ -389,7 +391,7 @@ class ChunkBuilder {
       const gz = this.cz * CHUNK_SIZE + lz + offset;
 
       const texIndex = getTexIndex(blockType, face);
-      const u0 = texIndex / ATLAS_COLS, u1 = (texIndex + 1) / ATLAS_COLS;
+      const u0 = 0, u1 = 1;
       const v0 = 0, v1 = 1;
       const baseIndex = this.positions.length / 3;
 
@@ -465,6 +467,7 @@ class ChunkBuilder {
       const m3 = l * this.getAoMultiplier(ao3);
 
       this.colors.push(m0, m0, m0,  m1, m1, m1,  m2, m2, m2,  m3, m3, m3);
+      this.texIndices.push(texIndex, texIndex, texIndex, texIndex);
 
       this.indices.push(
           baseIndex + 0, baseIndex + 1, baseIndex + 2,
@@ -589,6 +592,7 @@ globalThis.onmessage = (e) => {
           result.posArray.buffer, 
           result.normArray.buffer, 
           result.uvArray.buffer, 
+          result.texIndicesArray.buffer,
           result.indArray.buffer, 
           result.colorArray.buffer
       ] 
