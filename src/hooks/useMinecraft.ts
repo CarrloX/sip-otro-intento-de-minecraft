@@ -76,6 +76,7 @@ export interface MinecraftOptions {
   fancyLeaves?: boolean;
   showClouds?: boolean;
   enableShadows?: boolean;
+  enableMipmapping?: boolean;
   brightness?: number;
   seed?: number;
   worldId: string;
@@ -83,6 +84,7 @@ export interface MinecraftOptions {
   initialRotation?: { x: number; y: number };
   initialWorldTime?: number;
   onWorldReady?: () => void;
+  onStatusChange?: (status: { position: {x: number, y: number, z: number}; rotation: {x: number, y: number}; worldTime: number }) => void;
 }
 
 export const useMinecraft = ({
@@ -93,20 +95,19 @@ export const useMinecraft = ({
   fancyLeaves = true,
   showClouds = true,
   enableShadows = true,
+  enableMipmapping = true,
   brightness = 50,
   seed = 0,
   worldId,
   initialPosition,
   initialRotation,
   initialWorldTime,
-  onWorldReady
+  onWorldReady,
+  onStatusChange
 }: MinecraftOptions) => {
   const mountRef = useRef<HTMLButtonElement>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [fps, setFps] = useState(0);
-  const [cameraPosition, setCameraPosition] = useState<{x: number, y: number, z: number} | undefined>(initialPosition);
-  const [cameraRotation, setCameraRotation] = useState<{x: number, y: number} | undefined>(initialRotation);
-  const [currentWorldTime, setCurrentWorldTime] = useState<number>(initialWorldTime ?? Math.PI / 4);
   const frameCount = useRef(0);
   const lastFpsUpdate = useRef<number>(0);
   
@@ -150,6 +151,11 @@ export const useMinecraft = ({
   const lastRenderTime = useRef<number>(0);
   const lastSimulationTick = useRef<number>(0);
 
+  const onStatusChangeRef = useRef(onStatusChange);
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange;
+  }, [onStatusChange]);
+
   // Initialize World Hook (Manages Chunks and Blocks)
   const fancyLeavesRef = useRef(fancyLeaves);
   useEffect(() => { fancyLeavesRef.current = fancyLeaves; }, [fancyLeaves]);
@@ -159,6 +165,29 @@ export const useMinecraft = ({
       lightingSystemRef.current.cloudGroup.visible = showClouds;
     }
   }, [showClouds]);
+
+  // Handle Mipmapping Toggle (Re-create textures and materials)
+  useEffect(() => {
+    const oldMaterials = materialsRef.current;
+    const newMaterials = createMaterials(enableMipmapping);
+    materialsRef.current = newMaterials;
+    
+    if (sceneRef.current) {
+        sceneRef.current.traverse((child: any) => {
+            // Find any mesh using the unified material and replace it
+            if (child.isMesh && child.material && oldMaterials[1] && child.material.uuid === (oldMaterials[1] as THREE.Material).uuid) {
+                child.material = newMaterials[1];
+            }
+        });
+    }
+
+    // Dispose old materials and textures to prevent memory leaks
+    if (oldMaterials && oldMaterials[1]) {
+        const mat = oldMaterials[1] as any;
+        if (mat.mapArray) mat.mapArray.dispose();
+        mat.dispose();
+    }
+  }, [enableMipmapping]);
 
   useEffect(() => {
     if (rendererRef.current && sceneRef.current) {
@@ -304,9 +333,25 @@ export const useMinecraft = ({
         if (action === 'set') {
             if (value === 'day') {
                 worldTime = Math.PI / 4;
+                lastFpsUpdate.current = 0; // Force immediate save sync
+                if (cameraRef.current && onStatusChangeRef.current) {
+                    onStatusChangeRef.current({
+                        position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
+                        rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
+                        worldTime: worldTime
+                    });
+                }
                 return 'Time set to day';
             } else if (value === 'night') {
                 worldTime = Math.PI + Math.PI / 4;
+                lastFpsUpdate.current = 0; // Force immediate save sync
+                if (cameraRef.current && onStatusChangeRef.current) {
+                    onStatusChangeRef.current({
+                        position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
+                        rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
+                        worldTime: worldTime
+                    });
+                }
                 return 'Time set to night';
             }
             return 'Usage: /time set <day|night>';
@@ -321,6 +366,14 @@ export const useMinecraft = ({
             const pz = Number.parseFloat(z);
             if (!Number.isNaN(px) && !Number.isNaN(py) && !Number.isNaN(pz)) {
                 camera.position.set(px, py, pz);
+                lastFpsUpdate.current = 0; // Force immediate save sync
+                if (cameraRef.current && onStatusChangeRef.current) {
+                    onStatusChangeRef.current({
+                        position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
+                        rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
+                        worldTime: worldTime
+                    });
+                }
                 return `Teleported to ${px} ${py} ${pz}`;
             }
         }
@@ -336,6 +389,14 @@ export const useMinecraft = ({
                 
                 // Advance the visual time of day (1 tick = 0.05 seconds of delta time)
                 worldTime += steps * 0.05 * TIME_SPEED;
+                lastFpsUpdate.current = 0; // Force immediate save sync
+                if (cameraRef.current && onStatusChangeRef.current) {
+                    onStatusChangeRef.current({
+                        position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
+                        rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
+                        worldTime: worldTime
+                    });
+                }
 
                 return `Advanced simulation by ${steps} ticks.`;
             }
@@ -378,17 +439,12 @@ export const useMinecraft = ({
         lastFpsUpdate.current = time;
         
         // Sync position for saving (1s interval)
-        if (camera) {
-            setCameraPosition({
-                x: camera.position.x,
-                y: camera.position.y,
-                z: camera.position.z
+        if (camera && onStatusChangeRef.current) {
+            onStatusChangeRef.current({
+                position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+                rotation: { x: camera.rotation.x, y: camera.rotation.y },
+                worldTime: worldTime
             });
-            setCameraRotation({
-                x: camera.rotation.x,
-                y: camera.rotation.y
-            });
-            setCurrentWorldTime(worldTime);
         }
       }
 
@@ -482,5 +538,5 @@ export const useMinecraft = ({
 
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in globalThis);
 
-  return { mountRef, isLocked: isLocked || isMobile, lockControls, fps, cameraPosition, cameraRotation, currentWorldTime, handleMobileLook, handleMobileInteract };
+  return { mountRef, isLocked: isLocked || isMobile, lockControls, fps, handleMobileLook, handleMobileInteract };
 };

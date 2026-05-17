@@ -15,13 +15,15 @@ interface OptionsMenuProps {
   onShowCloudsChange: (showClouds: boolean) => void;
   enableShadows: boolean;
   onEnableShadowsChange: (enableShadows: boolean) => void;
+  enableMipmapping: boolean;
+  onEnableMipmappingChange: (enableMipmapping: boolean) => void;
   brightness: number;
   onBrightnessChange: (brightness: number) => void;
   onClose: () => void;
   onQuitToTitle: () => void;
 }
 
-const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, enableShadows, onEnableShadowsChange, brightness, onBrightnessChange, onClose, onQuitToTitle }) => {
+const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, enableShadows, onEnableShadowsChange, enableMipmapping, onEnableMipmappingChange, brightness, onBrightnessChange, onClose, onQuitToTitle }) => {
   const [cooldown, setCooldown] = React.useState(false);
 
   React.useEffect(() => {
@@ -124,6 +126,17 @@ const OptionsMenu: React.FC<OptionsMenuProps> = ({ isVisible, targetFps, onFpsCh
               className="option-checkbox"
               aria-label="Shadows"
               title="Activar o desactivar las sombras"
+            />
+          </div>
+          <div className="option-row horizontal spaced">
+            <span className="option-label">Mipmapping</span>
+            <input 
+              type="checkbox" 
+              checked={enableMipmapping} 
+              onChange={(e) => onEnableMipmappingChange(e.target.checked)}
+              className="option-checkbox"
+              aria-label="Mipmapping"
+              title="Filtro anti-aliasing para texturas lejanas"
             />
           </div>
         </div>

@@ -11,6 +11,7 @@ interface GameCanvasProps {
   fancyLeaves: boolean;
   showClouds: boolean;
   enableShadows: boolean;
+  enableMipmapping: boolean;
   brightness: number;
   seed: number;
   worldId: string;
@@ -23,8 +24,8 @@ interface GameCanvasProps {
   onStatusChange: (status: { isLocked: boolean; lockControls: () => void; fps: number; position?: {x: number, y: number, z: number}; rotation?: {x: number, y: number}; worldTime?: number }) => void;
 }
 
-const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fancyLeaves, showClouds, enableShadows, brightness, seed, worldId, isMenuOpen, isConsoleOpen = false, onWorldReady, initialPosition, initialRotation, initialWorldTime, onStatusChange }: GameCanvasProps) => {
-  const { mountRef, isLocked, lockControls, fps, cameraPosition, cameraRotation, currentWorldTime, handleMobileLook, handleMobileInteract } = useMinecraft({
+const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fancyLeaves, showClouds, enableShadows, enableMipmapping, brightness, seed, worldId, isMenuOpen, isConsoleOpen = false, onWorldReady, initialPosition, initialRotation, initialWorldTime, onStatusChange }: GameCanvasProps) => {
+  const { mountRef, isLocked, lockControls, fps, handleMobileLook, handleMobileInteract } = useMinecraft({
     currentBlockType,
     targetFps,
     renderDistance,
@@ -32,13 +33,17 @@ const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fan
     fancyLeaves,
     showClouds,
     enableShadows,
+    enableMipmapping,
     brightness,
     seed,
     worldId,
     initialPosition,
     initialRotation,
     initialWorldTime,
-    onWorldReady
+    onWorldReady,
+    onStatusChange: (status) => {
+      onStatusChange({ isLocked, lockControls, fps, position: status.position, rotation: status.rotation, worldTime: status.worldTime });
+    }
   });
   const [isMobile, setIsMobile] = useState(false);
 
@@ -47,8 +52,8 @@ const GameCanvas = ({ currentBlockType, targetFps, renderDistance, autoJump, fan
   }, []);
 
   useEffect(() => {
-    onStatusChange({ isLocked, lockControls, fps, position: cameraPosition, rotation: cameraRotation, worldTime: currentWorldTime });
-  }, [isLocked, lockControls, fps, cameraPosition, cameraRotation, currentWorldTime, onStatusChange]);
+    onStatusChange({ isLocked, lockControls, fps });
+  }, [isLocked, lockControls, fps, onStatusChange]);
 
   return (
     <>

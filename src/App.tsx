@@ -23,6 +23,7 @@ function App() {
   const [fancyLeaves, setFancyLeaves] = useState(!isMobile);
   const [showClouds, setShowClouds] = useState(true);
   const [enableShadows, setEnableShadows] = useState(true);
+  const [enableMipmapping, setEnableMipmapping] = useState(true);
   const [brightness, setBrightness] = useState(50);
   const [isMenuOpen, setIsMenuOpen] = useState(true); // Start with menu open
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
@@ -112,6 +113,27 @@ function App() {
       commandService.unregister('/seed');
     };
   }, [seed]);
+
+  // Auto-save every 5 seconds while playing
+  useEffect(() => {
+    if (gameState !== 'playing' || !currentWorldId) return;
+
+    const intervalId = setInterval(() => {
+        if (currentPositionRef.current || currentRotationRef.current || currentWorldTimeRef.current !== undefined) {
+            initDB().then(db => {
+                updateWorldLastPlayed(
+                    db, 
+                    currentWorldId, 
+                    currentPositionRef.current, 
+                    currentRotationRef.current, 
+                    currentWorldTimeRef.current
+                ).catch(console.error);
+            });
+        }
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [gameState, currentWorldId]);
 
   const handleCreateWorld = async (name: string, newSeed: number) => {
     if (!document.pointerLockElement) {
@@ -209,6 +231,7 @@ function App() {
             fancyLeaves={fancyLeaves}
             showClouds={showClouds}
             enableShadows={enableShadows}
+            enableMipmapping={enableMipmapping}
             brightness={brightness}
             seed={seed}
             worldId={currentWorldId || 'default'}
@@ -247,6 +270,8 @@ function App() {
                 onShowCloudsChange={setShowClouds}
                 enableShadows={enableShadows}
                 onEnableShadowsChange={setEnableShadows}
+                enableMipmapping={enableMipmapping}
+                onEnableMipmappingChange={setEnableMipmapping}
                 brightness={brightness}
                 onBrightnessChange={setBrightness}
                 onMenuToggle={toggleMenu}

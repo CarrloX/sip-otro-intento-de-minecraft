@@ -139,7 +139,7 @@ const getGenericPixel = (type: string, x: number, y: number, noiseGrid: Float32A
     return { r: modR, g: modG, b: modB, a: alpha };
 };
 
-export const generateTextureArray = () => {
+export const generateTextureArray = (enableMipmapping: boolean = true) => {
   const types = ['dirt', 'grass_top', 'stone', 'wood_side', 'wood_top', 'leaves', 'grass_side', 'sand'];
   const width = 16;
   const height = 16;
@@ -185,9 +185,9 @@ export const generateTextureArray = () => {
   const texture = new THREE.DataArrayTexture(data, width, height, depth);
   texture.format = THREE.RGBAFormat;
   texture.type = THREE.UnsignedByteType;
-  texture.minFilter = THREE.NearestMipmapLinearFilter;
+  texture.minFilter = enableMipmapping ? THREE.NearestMipmapLinearFilter : THREE.NearestFilter;
   texture.magFilter = THREE.NearestFilter;
-  texture.generateMipmaps = true;
+  texture.generateMipmaps = enableMipmapping;
   texture.needsUpdate = true;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
@@ -195,8 +195,8 @@ export const generateTextureArray = () => {
   return texture;
 };
 
-export const createUnifiedMaterial = () => {
-  const arrayTexture = generateTextureArray();
+export const createUnifiedMaterial = (enableMipmapping: boolean = true) => {
+  const arrayTexture = generateTextureArray(enableMipmapping);
   
   const material = new THREE.MeshLambertMaterial({ 
      vertexColors: true,
@@ -241,8 +241,8 @@ export const createUnifiedMaterial = () => {
 };
 
 // Return Record with all IDs pointing to isolated material for backwards compatibility in GameCanvas
-export const createMaterials = () => {
-  const unifiedMaterial = createUnifiedMaterial();
+export const createMaterials = (enableMipmapping: boolean = true) => {
+  const unifiedMaterial = createUnifiedMaterial(enableMipmapping);
   const materials: Record<number, THREE.Material | THREE.Material[]> = {};
   materials[1] = unifiedMaterial;
   materials[2] = unifiedMaterial;

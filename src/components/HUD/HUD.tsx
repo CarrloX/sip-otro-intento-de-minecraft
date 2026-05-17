@@ -20,13 +20,15 @@ interface HudProps {
   onShowCloudsChange: (showClouds: boolean) => void;
   enableShadows: boolean;
   onEnableShadowsChange: (enableShadows: boolean) => void;
+  enableMipmapping: boolean;
+  onEnableMipmappingChange: (enableMipmapping: boolean) => void;
   brightness: number;
   onBrightnessChange: (brightness: number) => void;
   onMenuToggle: () => void;
   onQuitToTitle: () => void;
 }
 
-const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, enableShadows, onEnableShadowsChange, brightness, onBrightnessChange, onMenuToggle, onQuitToTitle }: HudProps) => {
+const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange, renderDistance, onRenderDistanceChange, autoJump, onAutoJumpChange, fancyLeaves, onFancyLeavesChange, showClouds, onShowCloudsChange, enableShadows, onEnableShadowsChange, enableMipmapping, onEnableMipmappingChange, brightness, onBrightnessChange, onMenuToggle, onQuitToTitle }: HudProps) => {
   return (
     <div id="ui-layer">
       <div className="debug-info">
@@ -55,6 +57,8 @@ const Hud = ({ isLocked, fps, onBlockChange, isMenuOpen, targetFps, onFpsChange,
         onShowCloudsChange={onShowCloudsChange}
         enableShadows={enableShadows}
         onEnableShadowsChange={onEnableShadowsChange}
+        enableMipmapping={enableMipmapping}
+        onEnableMipmappingChange={onEnableMipmappingChange}
         brightness={brightness}
         onBrightnessChange={onBrightnessChange}
         onClose={onMenuToggle}
