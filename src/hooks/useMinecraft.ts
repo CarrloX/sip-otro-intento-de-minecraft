@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { createMaterials } from '../services/TextureService';
 import { setupLighting, updateFog, updateLighting } from '../services/LightingService';
+import { PlayerModel } from '../entities/PlayerModel';
+import steveSkinUrl from '../assets/skins/steve.png';
 import { createHighlighter, updateSelection } from '../services/SelectionService';
 import type { SelectionResult } from '../services/SelectionService';
 import { usePlayer } from './usePlayer';
@@ -182,9 +184,9 @@ export const useMinecraft = ({
     }
 
     // Dispose old materials and textures to prevent memory leaks
-    if (oldMaterials && oldMaterials[1]) {
+    if (oldMaterials?.[1]) {
         const mat = oldMaterials[1] as any;
-        if (mat.mapArray) mat.mapArray.dispose();
+        mat.mapArray?.dispose();
         mat.dispose();
     }
   }, [enableMipmapping]);
@@ -280,7 +282,74 @@ export const useMinecraft = ({
     // 2. Init Camera
     const initialFar = Math.max(512, renderDistanceRef.current * 16 * 2);
     const camera = new THREE.PerspectiveCamera(75, globalThis.innerWidth / globalThis.innerHeight, 0.1, initialFar);
+    const thirdPersonCamera = new THREE.PerspectiveCamera(75, globalThis.innerWidth / globalThis.innerHeight, 0.1, initialFar);
+
+    const isThirdPersonRef = { current: false };
+    const handleKeyDownCamera = (e: KeyboardEvent) => {
+        if (e.code === 'KeyV' && !document.querySelector('.console-overlay')) {
+            isThirdPersonRef.current = !isThirdPersonRef.current;
+        }
+    };
+    globalThis.addEventListener('keydown', handleKeyDownCamera);
+
+    // Initialize Models
+    const textureLoader = new THREE.TextureLoader();
     
+    // First-Person Hand
+    let firstPersonModel: PlayerModel;
+    let firstPersonArm: THREE.Mesh;
+    
+    // Third-Person Body
+    let thirdPersonModel: PlayerModel;
+
+    const skinTexture = textureLoader.load(steveSkinUrl, (texture) => {
+        // Triggered when texture is loaded. Now we check for slim model!
+        if (texture.image) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.drawImage(texture.image, 0, 0);
+                const imageData = ctx.getImageData(54, 20, 1, 1);
+                if (imageData.data[3] === 0) {
+                    // 1. Update third-person body
+                    thirdPersonModel.setSlim(true);
+
+                    // 2. Dispose and replace the first-person hand on the camera
+                    camera.remove(firstPersonArm);
+                    firstPersonArm.geometry.dispose();
+                    firstPersonArm.children.forEach(c => {
+                        if (c instanceof THREE.Mesh) c.geometry.dispose();
+                    });
+
+                    firstPersonModel.setSlim(true);
+                    firstPersonArm = firstPersonModel.rightArm;
+                    firstPersonModel.group.remove(firstPersonArm);
+                    
+                    // Re-setup scale, position, and rotation for first-person camera view
+                    firstPersonArm.scale.set(0.06, 0.06, 0.06); 
+                    firstPersonArm.position.set(0.48, -0.7, -0.45); 
+                    firstPersonArm.rotation.set(2.4, -0.6, 0.2); 
+                    camera.add(firstPersonArm);
+                }
+            }
+        }
+    });
+
+    firstPersonModel = new PlayerModel(skinTexture);
+    firstPersonArm = firstPersonModel.rightArm;
+    firstPersonModel.group.remove(firstPersonArm);
+    firstPersonArm.scale.set(0.06, 0.06, 0.06); 
+    firstPersonArm.position.set(0.48, -0.7, -0.45); 
+    firstPersonArm.rotation.set(2.4, -0.6, 0.2); 
+    camera.add(firstPersonArm);
+    scene.add(camera);
+
+    thirdPersonModel = new PlayerModel(skinTexture);
+    scene.add(thirdPersonModel.group);
+    thirdPersonModel.group.visible = false;
+
     // Set initial position immediately if available
     if (initialPosition) {
         camera.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
@@ -382,8 +451,8 @@ export const useMinecraft = ({
 
     commandService.register('/tick', (action?: string, value?: string) => {
         if (action === 'advance') {
-            const steps = parseInt(value || '100');
-            if (!isNaN(steps) && steps > 0) {
+            const steps = Number.parseInt(value || '100');
+            if (!Number.isNaN(steps) && steps > 0) {
                 const loadedChunks = Array.from(world.chunksDataRef.current.keys());
                 simulateRandomTicks(loadedChunks, world.chunksDataRef.current, world.addBlock, steps);
                 
@@ -461,6 +530,49 @@ export const useMinecraft = ({
         // Delegate updates to specialized hooks
         if (isWorldReadyRef.current) {
           player.update(delta, camera, controls);
+          
+          // Animate Models based on horizontal velocity (X and Z) only to ignore falling/jumping
+          const vel = player.velocity.current;
+          const horizontalVelocityLength = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+          const isFlying = player.isFlying?.current ?? false;
+          const walkingSpeed = (horizontalVelocityLength > 0.5 && !isFlying) ? horizontalVelocityLength : 0;
+          
+          // Update third person model animation
+          thirdPersonModel.updateAnimation(walkingSpeed * 0.2, delta);
+          
+          // Increment first-person walkTime manually to prevent updateAnimation's idle reset from zeroing out the arm rotation
+          if (walkingSpeed > 1) {
+              firstPersonModel.walkTime += delta * walkingSpeed * 2;
+              const swing = Math.sin(firstPersonModel.walkTime) * 0.05;
+              firstPersonArm.position.y = -0.7 + Math.abs(swing);
+              firstPersonArm.position.x = 0.48 + swing * 0.5;
+              firstPersonArm.rotation.x = 2.4 + (Math.sin(firstPersonModel.walkTime) * 0.1);
+          } else {
+              firstPersonArm.position.y = THREE.MathUtils.lerp(firstPersonArm.position.y, -0.7, 0.1);
+              firstPersonArm.position.x = THREE.MathUtils.lerp(firstPersonArm.position.x, 0.48, 0.1);
+              firstPersonArm.rotation.x = THREE.MathUtils.lerp(firstPersonArm.rotation.x, 2.4, 0.1);
+          }
+          
+          if (isThirdPersonRef.current) {
+              firstPersonArm.visible = false;
+              thirdPersonModel.group.visible = true;
+              
+              // Position body slightly lower so feet touch the ground (camera is at eye level)
+              thirdPersonModel.group.position.copy(camera.position);
+              thirdPersonModel.group.position.y -= 1.6;
+              // Only rotate horizontally
+              const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+              thirdPersonModel.group.rotation.set(0, euler.y + Math.PI, 0); // Model faces camera naturally, so add PI
+              
+              // Move 3rd person camera behind player
+              const offset = new THREE.Vector3(0, 0, 4); // 4 blocks behind
+              offset.applyQuaternion(camera.quaternion);
+              thirdPersonCamera.position.copy(camera.position).add(offset);
+              thirdPersonCamera.quaternion.copy(camera.quaternion);
+          } else {
+              firstPersonArm.visible = true;
+              thirdPersonModel.group.visible = false;
+          }
         }
         
         // Update Debug Coordinates
@@ -491,13 +603,15 @@ export const useMinecraft = ({
       updateLighting(scene, lightingSystem, worldTime, camera.position);
       
       prevTime.current = time;
-      renderer.render(scene, camera);
+      renderer.render(scene, isThirdPersonRef.current ? thirdPersonCamera : camera);
     };
     animate();
 
     const onResize = () => {
       camera.aspect = globalThis.innerWidth / globalThis.innerHeight;
       camera.updateProjectionMatrix();
+      thirdPersonCamera.aspect = globalThis.innerWidth / globalThis.innerHeight;
+      thirdPersonCamera.updateProjectionMatrix();
       renderer.setSize(globalThis.innerWidth, globalThis.innerHeight);
     };
     globalThis.addEventListener('resize', onResize);
@@ -506,6 +620,7 @@ export const useMinecraft = ({
     return () => {
       cancelAnimationFrame(animationId);
       globalThis.removeEventListener('resize', onResize);
+      globalThis.removeEventListener('keydown', handleKeyDownCamera);
       document.removeEventListener('mousedown', handleMouseDown);
       controls.removeEventListener('lock', onLock);
       controls.removeEventListener('unlock', onUnlock);

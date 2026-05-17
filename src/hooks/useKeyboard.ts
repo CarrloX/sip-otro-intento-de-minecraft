@@ -36,6 +36,8 @@ const actionMap: Record<string, string> = {
   ControlRight: 'sprint',
   KeyT: 'chat',
   t: 'chat',
+  KeyV: 'cameraMode',
+  v: 'cameraMode',
 };
 
 export const useKeyboard = () => {
@@ -56,6 +58,7 @@ export const useKeyboard = () => {
     down: false,
     isFlying: false,
     chat: false,
+    cameraMode: false,
   });
 
   const actionsRef = useRef(actions);

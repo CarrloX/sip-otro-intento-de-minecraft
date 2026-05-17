@@ -17,6 +17,7 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
   const moveRight = useRef(false);
   const canJump = useRef(false);
   const isSprintingRef = useRef(false);
+  const isFlyingRef = useRef(false);
   const physicsAccumulator = useRef(0);
   const eyeHeight = useRef(1.6);
 
@@ -195,6 +196,7 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     moveLeft.current = actions.moveLeft;
     moveRight.current = actions.moveRight;
     isSprintingRef.current = actions.sprint && actions.moveForward && !(actions.down && !actions.isFlying);
+    isFlyingRef.current = !!actions.isFlying;
 
     // Sub-stepping simulation
     physicsAccumulator.current += delta;
@@ -214,7 +216,7 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
 
   return useMemo(() => ({
     moveForward, moveBackward, moveLeft, moveRight,
-    canJump, isSprinting: isSprintingRef,
+    canJump, isSprinting: isSprintingRef, isFlying: isFlyingRef,
     velocity, update
   }), [update]);
 };

@@ -71,20 +71,19 @@ export const simulateRandomTicks = (
     const TICKS_PER_CHUNK = 60 * tickMultiplier; 
     const Y_HEIGHT = Y_MAX - Y_MIN + 1; // 320
     
-    for (let c = 0; c < loadedChunks.length; c++) {
-        const chunkId = loadedChunks[c];
+    for (const chunkId of loadedChunks) {
         const chunkData = chunksData.get(chunkId);
         if (!chunkData) continue;
 
         const commaIdx = chunkId.indexOf(',');
-        const cx = parseInt(chunkId.substring(0, commaIdx)) * CHUNK_SIZE;
-        const cz = parseInt(chunkId.substring(commaIdx + 1)) * CHUNK_SIZE;
+        const cx = Number.parseInt(chunkId.substring(0, commaIdx)) * CHUNK_SIZE;
+        const cz = Number.parseInt(chunkId.substring(commaIdx + 1)) * CHUNK_SIZE;
 
         for (let i = 0; i < TICKS_PER_CHUNK; i++) {
-            // Highly optimized random integer selection (Bitwise OR 0 is faster than Math.floor)
-            const lx = (Math.random() * 16) | 0;
-            const lz = (Math.random() * 16) | 0;
-            const indexY = (Math.random() * Y_HEIGHT) | 0;
+            // Highly optimized random integer selection
+            const lx = Math.trunc(Math.random() * 16);
+            const lz = Math.trunc(Math.random() * 16);
+            const indexY = Math.trunc(Math.random() * Y_HEIGHT);
 
             const idx = lx + (lz * 16) + (indexY * 256);
             const blockType = chunkData[idx];
