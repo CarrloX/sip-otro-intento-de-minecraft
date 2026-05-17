@@ -15,30 +15,30 @@ import { getGlobalBlockType, Y_MIN, Y_MAX } from '../services/WorldService';
 import { simulateRandomTicks } from '../services/SimulationService';
 
 const findSafeSpawnY = (px: number, pz: number, chunksData: Map<string, Uint8Array>): number => {
-    let safeY = 30; // Default fallback
-    
-    // Find the highest solid block that has at least 2 blocks of air above it
-    for (let y = Y_MAX - 2; y >= Y_MIN; y--) {
-        const block = getGlobalBlockType(px, y, pz, chunksData);
-        if (block !== 0) { // Found a solid block
-            const above1 = getGlobalBlockType(px, y + 1, pz, chunksData);
-            const above2 = getGlobalBlockType(px, y + 2, pz, chunksData);
-            
-            // If there's enough head room (at least 2 blocks of air)
-            if (above1 === 0 && above2 === 0) {
-                safeY = y + 2.2;
-                break;
-            }
-        }
+  let safeY = 30; // Default fallback
+
+  // Find the highest solid block that has at least 2 blocks of air above it
+  for (let y = Y_MAX - 2; y >= Y_MIN; y--) {
+    const block = getGlobalBlockType(px, y, pz, chunksData);
+    if (block !== 0) { // Found a solid block
+      const above1 = getGlobalBlockType(px, y + 1, pz, chunksData);
+      const above2 = getGlobalBlockType(px, y + 2, pz, chunksData);
+
+      // If there's enough head room (at least 2 blocks of air)
+      if (above1 === 0 && above2 === 0) {
+        safeY = y + 2.2;
+        break;
+      }
     }
-    return safeY;
+  }
+  return safeY;
 };
 
 const updateDebugUI = (camera: THREE.PerspectiveCamera) => {
   const posX = camera.position.x;
   const posY = camera.position.y;
   const posZ = camera.position.z;
-  
+
   const xyzEl = document.getElementById('debug-xyz');
   if (xyzEl) xyzEl.innerText = `XYZ: ${posX.toFixed(3)} / ${posY.toFixed(5)} / ${posZ.toFixed(3)}`;
 
@@ -56,17 +56,17 @@ const updateDebugUI = (camera: THREE.PerspectiveCamera) => {
 
   const facingEl = document.getElementById('debug-facing');
   if (facingEl) {
-      const dir = new THREE.Vector3();
-      camera.getWorldDirection(dir);
-      let facing: string;
-      if (Math.abs(dir.x) > Math.abs(dir.z)) {
-          facing = dir.x > 0 ? "east (Towards positive X)" : "west (Towards negative X)";
-      } else if (dir.z > 0) {
-          facing = "south (Towards positive Z)";
-      } else {
-          facing = "north (Towards negative Z)";
-      }
-      facingEl.innerText = `Facing: ${facing}`;
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    let facing: string;
+    if (Math.abs(dir.x) > Math.abs(dir.z)) {
+      facing = dir.x > 0 ? "east (Towards positive X)" : "west (Towards negative X)";
+    } else if (dir.z > 0) {
+      facing = "south (Towards positive Z)";
+    } else {
+      facing = "north (Towards negative Z)";
+    }
+    facingEl.innerText = `Facing: ${facing}`;
   }
 };
 
@@ -86,7 +86,7 @@ export interface MinecraftOptions {
   initialRotation?: { x: number; y: number };
   initialWorldTime?: number;
   onWorldReady?: () => void;
-  onStatusChange?: (status: { position: {x: number, y: number, z: number}; rotation: {x: number, y: number}; worldTime: number }) => void;
+  onStatusChange?: (status: { position: { x: number, y: number, z: number }; rotation: { x: number, y: number }; worldTime: number }) => void;
 }
 
 export const useMinecraft = ({
@@ -112,7 +112,7 @@ export const useMinecraft = ({
   const [fps, setFps] = useState(0);
   const frameCount = useRef(0);
   const lastFpsUpdate = useRef<number>(0);
-  
+
   const currentBlockTypeRef = useRef(currentBlockType);
   const targetFpsRef = useRef(targetFps);
 
@@ -123,7 +123,7 @@ export const useMinecraft = ({
   useEffect(() => {
     targetFpsRef.current = targetFps;
   }, [targetFps]);
-  
+
   const renderDistanceRef = useRef(renderDistance);
   useEffect(() => {
     renderDistanceRef.current = renderDistance;
@@ -137,7 +137,7 @@ export const useMinecraft = ({
       cameraRef.current.updateProjectionMatrix();
     }
   }, [renderDistance]);
-  
+
   // Three.js Core Refs
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -145,7 +145,7 @@ export const useMinecraft = ({
   const controlsRef = useRef<PointerLockControls | null>(null);
   const hoveredBlockRef = useRef<SelectionResult | null>(null);
   const lightingSystemRef = useRef<any>(null);
-  
+
   // Shared Configuration
   const materialsRef = useRef<Record<number, THREE.Material | THREE.Material[]>>({});
   const blockGeometryRef = useRef(new THREE.BoxGeometry(1, 1, 1));
@@ -173,21 +173,21 @@ export const useMinecraft = ({
     const oldMaterials = materialsRef.current;
     const newMaterials = createMaterials(enableMipmapping);
     materialsRef.current = newMaterials;
-    
+
     if (sceneRef.current) {
-        sceneRef.current.traverse((child: any) => {
-            // Find any mesh using the unified material and replace it
-            if (child.isMesh && child.material && oldMaterials[1] && child.material.uuid === (oldMaterials[1] as THREE.Material).uuid) {
-                child.material = newMaterials[1];
-            }
-        });
+      sceneRef.current.traverse((child: any) => {
+        // Find any mesh using the unified material and replace it
+        if (child.isMesh && child.material && oldMaterials[1] && child.material.uuid === (oldMaterials[1] as THREE.Material).uuid) {
+          child.material = newMaterials[1];
+        }
+      });
     }
 
     // Dispose old materials and textures to prevent memory leaks
     if (oldMaterials?.[1]) {
-        const mat = oldMaterials[1] as any;
-        mat.mapArray?.dispose();
-        mat.dispose();
+      const mat = oldMaterials[1] as any;
+      mat.mapArray?.dispose();
+      mat.dispose();
     }
   }, [enableMipmapping]);
 
@@ -201,32 +201,32 @@ export const useMinecraft = ({
       });
     }
   }, [enableShadows]);
-  
+
   useEffect(() => {
     if (rendererRef.current) {
       rendererRef.current.toneMapping = THREE.LinearToneMapping;
       rendererRef.current.toneMappingExposure = brightness / 50;
     }
   }, [brightness]);
-  
+
   const seedRef = useRef(seed);
   useEffect(() => { seedRef.current = seed; }, [seed]);
 
   const isWorldReadyRef = useRef(false);
   const handleWorldReady = useCallback((chunksData: Map<string, Uint8Array>) => {
     if (!isWorldReadyRef.current && cameraRef.current) {
-        if (initialPosition) {
-            cameraRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
-        }
-        if (initialRotation) {
-            cameraRef.current.rotation.set(initialRotation.x, initialRotation.y, 0, 'YXZ');
-        }
-        
-        if (!initialPosition) {
-            const px = Math.floor(cameraRef.current.position.x);
-            const pz = Math.floor(cameraRef.current.position.z);
-            cameraRef.current.position.y = findSafeSpawnY(px, pz, chunksData);
-        }
+      if (initialPosition) {
+        cameraRef.current.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+      }
+      if (initialRotation) {
+        cameraRef.current.rotation.set(initialRotation.x, initialRotation.y, 0, 'YXZ');
+      }
+
+      if (!initialPosition) {
+        const px = Math.floor(cameraRef.current.position.x);
+        const pz = Math.floor(cameraRef.current.position.z);
+        cameraRef.current.position.y = findSafeSpawnY(px, pz, chunksData);
+      }
     }
     isWorldReadyRef.current = true;
     onWorldReady?.();
@@ -249,7 +249,7 @@ export const useMinecraft = ({
   }, [autoJump]);
 
   const player = usePlayer(world.chunksDataRef, autoJumpRef);
-  
+
   const interaction = useInteraction({
     objectsRef: world.objectsRef,
     cameraRef,
@@ -286,63 +286,63 @@ export const useMinecraft = ({
 
     const isThirdPersonRef = { current: false };
     const handleKeyDownCamera = (e: KeyboardEvent) => {
-        if (e.code === 'KeyV' && !document.querySelector('.console-overlay')) {
-            isThirdPersonRef.current = !isThirdPersonRef.current;
-        }
+      if (e.code === 'KeyV' && !document.querySelector('.console-overlay')) {
+        isThirdPersonRef.current = !isThirdPersonRef.current;
+      }
     };
     globalThis.addEventListener('keydown', handleKeyDownCamera);
 
     // Initialize Models
     const textureLoader = new THREE.TextureLoader();
-    
+
     // First-Person Hand
     let firstPersonModel: PlayerModel;
     let firstPersonArm: THREE.Mesh;
-    
+
     // Third-Person Body
     let thirdPersonModel: PlayerModel;
 
     const skinTexture = textureLoader.load(steveSkinUrl, (texture) => {
-        // Triggered when texture is loaded. Now we check for slim model!
-        if (texture.image) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 64;
-            canvas.height = 64;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-                ctx.drawImage(texture.image, 0, 0);
-                const imageData = ctx.getImageData(54, 20, 1, 1);
-                if (imageData.data[3] === 0) {
-                    // 1. Update third-person body
-                    thirdPersonModel.setSlim(true);
+      // Triggered when texture is loaded. Now we check for slim model!
+      if (texture.image) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(texture.image, 0, 0);
+          const imageData = ctx.getImageData(54, 20, 1, 1);
+          if (imageData.data[3] === 0) {
+            // 1. Update third-person body
+            thirdPersonModel.setSlim(true);
 
-                    // 2. Dispose and replace the first-person hand on the camera
-                    camera.remove(firstPersonArm);
-                    firstPersonArm.geometry.dispose();
-                    firstPersonArm.children.forEach(c => {
-                        if (c instanceof THREE.Mesh) c.geometry.dispose();
-                    });
+            // 2. Dispose and replace the first-person hand on the camera
+            camera.remove(firstPersonArm);
+            firstPersonArm.geometry.dispose();
+            firstPersonArm.children.forEach(c => {
+              if (c instanceof THREE.Mesh) c.geometry.dispose();
+            });
 
-                    firstPersonModel.setSlim(true);
-                    firstPersonArm = firstPersonModel.rightArm;
-                    firstPersonModel.group.remove(firstPersonArm);
-                    
-                    // Re-setup scale, position, and rotation for first-person camera view
-                    firstPersonArm.scale.set(0.06, 0.06, 0.06); 
-                    firstPersonArm.position.set(0.48, -0.7, -0.45); 
-                    firstPersonArm.rotation.set(2.4, -0.6, 0.2); 
-                    camera.add(firstPersonArm);
-                }
-            }
+            firstPersonModel.setSlim(true);
+            firstPersonArm = firstPersonModel.rightArm;
+            firstPersonModel.group.remove(firstPersonArm);
+
+            // Re-setup scale, position, and rotation for first-person camera view
+            firstPersonArm.scale.set(0.06, 0.06, 0.06);
+            firstPersonArm.position.set(0.48, -0.7, -0.45);
+            firstPersonArm.rotation.set(2.4, -0.6, 0.2);
+            camera.add(firstPersonArm);
+          }
         }
+      }
     });
 
     firstPersonModel = new PlayerModel(skinTexture);
     firstPersonArm = firstPersonModel.rightArm;
     firstPersonModel.group.remove(firstPersonArm);
-    firstPersonArm.scale.set(0.06, 0.06, 0.06); 
-    firstPersonArm.position.set(0.48, -0.7, -0.45); 
-    firstPersonArm.rotation.set(2.4, -0.6, 0.2); 
+    firstPersonArm.scale.set(0.06, 0.06, 0.06);
+    firstPersonArm.position.set(0.48, -0.7, -0.45);
+    firstPersonArm.rotation.set(2.4, -0.6, 0.2);
     camera.add(firstPersonArm);
     scene.add(camera);
 
@@ -352,16 +352,16 @@ export const useMinecraft = ({
 
     // Set initial position immediately if available
     if (initialPosition) {
-        camera.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
+      camera.position.set(initialPosition.x, initialPosition.y, initialPosition.z);
     } else {
-        camera.position.set(0, 30, 0);
+      camera.position.set(0, 30, 0);
     }
 
     // Set initial rotation immediately if available
     if (initialRotation) {
-        camera.rotation.set(initialRotation.x, initialRotation.y, 0, 'YXZ');
+      camera.rotation.set(initialRotation.x, initialRotation.y, 0, 'YXZ');
     }
-    
+
     cameraRef.current = camera;
 
     // 3. Init Renderer
@@ -369,7 +369,7 @@ export const useMinecraft = ({
     renderer.setPixelRatio(globalThis.devicePixelRatio);
     renderer.setSize(globalThis.innerWidth, globalThis.innerHeight);
     renderer.shadowMap.enabled = enableShadows;
-    renderer.shadowMap.type = THREE.PCFShadowMap; 
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.LinearToneMapping;
     renderer.toneMappingExposure = brightness / 50;
     mountNode.appendChild(renderer.domElement);
@@ -399,79 +399,79 @@ export const useMinecraft = ({
     scene.add(highlighter);
 
     commandService.register('/time', (action?: string, value?: string) => {
-        if (action === 'set') {
-            if (value === 'day') {
-                worldTime = Math.PI / 4;
-                lastFpsUpdate.current = 0; // Force immediate save sync
-                if (cameraRef.current && onStatusChangeRef.current) {
-                    onStatusChangeRef.current({
-                        position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
-                        rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
-                        worldTime: worldTime
-                    });
-                }
-                return 'Time set to day';
-            } else if (value === 'night') {
-                worldTime = Math.PI + Math.PI / 4;
-                lastFpsUpdate.current = 0; // Force immediate save sync
-                if (cameraRef.current && onStatusChangeRef.current) {
-                    onStatusChangeRef.current({
-                        position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
-                        rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
-                        worldTime: worldTime
-                    });
-                }
-                return 'Time set to night';
-            }
-            return 'Usage: /time set <day|night>';
+      if (action === 'set') {
+        if (value === 'day') {
+          worldTime = Math.PI / 4;
+          lastFpsUpdate.current = 0; // Force immediate save sync
+          if (cameraRef.current && onStatusChangeRef.current) {
+            onStatusChangeRef.current({
+              position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
+              rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
+              worldTime: worldTime
+            });
+          }
+          return 'Time set to day';
+        } else if (value === 'night') {
+          worldTime = Math.PI + Math.PI / 4;
+          lastFpsUpdate.current = 0; // Force immediate save sync
+          if (cameraRef.current && onStatusChangeRef.current) {
+            onStatusChangeRef.current({
+              position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
+              rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
+              worldTime: worldTime
+            });
+          }
+          return 'Time set to night';
         }
         return 'Usage: /time set <day|night>';
+      }
+      return 'Usage: /time set <day|night>';
     });
 
     commandService.register('/tp', (x?: string, y?: string, z?: string) => {
-        if (x !== undefined && y !== undefined && z !== undefined) {
-            const px = Number.parseFloat(x);
-            const py = Number.parseFloat(y);
-            const pz = Number.parseFloat(z);
-            if (!Number.isNaN(px) && !Number.isNaN(py) && !Number.isNaN(pz)) {
-                camera.position.set(px, py, pz);
-                lastFpsUpdate.current = 0; // Force immediate save sync
-                if (cameraRef.current && onStatusChangeRef.current) {
-                    onStatusChangeRef.current({
-                        position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
-                        rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
-                        worldTime: worldTime
-                    });
-                }
-                return `Teleported to ${px} ${py} ${pz}`;
-            }
+      if (x !== undefined && y !== undefined && z !== undefined) {
+        const px = Number.parseFloat(x);
+        const py = Number.parseFloat(y);
+        const pz = Number.parseFloat(z);
+        if (!Number.isNaN(px) && !Number.isNaN(py) && !Number.isNaN(pz)) {
+          camera.position.set(px, py, pz);
+          lastFpsUpdate.current = 0; // Force immediate save sync
+          if (cameraRef.current && onStatusChangeRef.current) {
+            onStatusChangeRef.current({
+              position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
+              rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
+              worldTime: worldTime
+            });
+          }
+          return `Teleported to ${px} ${py} ${pz}`;
         }
-        return 'Usage: /tp <x> <y> <z>';
+      }
+      return 'Usage: /tp <x> <y> <z>';
     });
 
     commandService.register('/tick', (action?: string, value?: string) => {
-        if (action === 'advance') {
-            const steps = Number.parseInt(value || '100');
-            if (!Number.isNaN(steps) && steps > 0) {
-                const loadedChunks = Array.from(world.chunksDataRef.current.keys());
-                simulateRandomTicks(loadedChunks, world.chunksDataRef.current, world.addBlock, steps);
-                
-                // Advance the visual time of day (1 tick = 0.05 seconds of delta time)
-                worldTime += steps * 0.05 * TIME_SPEED;
-                lastFpsUpdate.current = 0; // Force immediate save sync
-                if (cameraRef.current && onStatusChangeRef.current) {
-                    onStatusChangeRef.current({
-                        position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
-                        rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
-                        worldTime: worldTime
-                    });
-                }
+      if (action === 'advance') {
+        const steps = Number.parseInt(value || '100');
+        if (!Number.isNaN(steps) && steps > 0) {
+          const loadedChunks = Array.from(world.chunksDataRef.current.keys());
+          simulateRandomTicks(loadedChunks, world.chunksDataRef.current, world.addBlock, steps);
 
-                return `Advanced simulation by ${steps} ticks.`;
-            }
-            return 'Usage: /tick advance <amount>';
+          // Advance the visual time of day (1 tick = 0.05 seconds of delta time)
+          worldTime += steps * 0.05 * TIME_SPEED;
+          lastFpsUpdate.current = 0; // Force immediate save sync
+          if (cameraRef.current && onStatusChangeRef.current) {
+            onStatusChangeRef.current({
+              position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
+              rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
+              worldTime: worldTime
+            });
+          }
+
+          return `Advanced simulation by ${steps} ticks.`;
         }
         return 'Usage: /tick advance <amount>';
+      }
+      return 'Usage: /tick advance <amount>';
     });
 
     const handleMouseDown = (e: MouseEvent) => interaction.handleMouseDown(e);
@@ -483,125 +483,137 @@ export const useMinecraft = ({
     lastRenderTime.current = performance.now();
     lastSimulationTick.current = performance.now();
 
-    // 7. Animation Loop
-    let animationId: number;
-    const animate = () => {
-      animationId = requestAnimationFrame(animate);
-      const time = performance.now();
-      
-      // FPS Capping Logic
-      const interval = 1000 / targetFpsRef.current;
-      const elapsed = time - lastRenderTime.current;
-      
-      if (elapsed < interval) return;
-      
-      // Update lastRenderTime to the start of this frame (with drift compensation)
-      lastRenderTime.current = time - (elapsed % interval);
-
-      const delta = Math.min((time - prevTime.current) / 1000, 0.1);
-
-      // FPS Tracking (For UI display)
+    // Helper functions extracted to reduce Cognitive Complexity (SonarLint S3776)
+    const updateFPSAndStats = (time: number) => {
       frameCount.current++;
       if (time - lastFpsUpdate.current > 1000) {
         setFps(Math.round((frameCount.current * 1000) / (time - lastFpsUpdate.current)));
         frameCount.current = 0;
         lastFpsUpdate.current = time;
-        
+
         // Sync position for saving (1s interval)
         if (camera && onStatusChangeRef.current) {
-            onStatusChangeRef.current({
-                position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
-                rotation: { x: camera.rotation.x, y: camera.rotation.y },
-                worldTime: worldTime
-            });
+          onStatusChangeRef.current({
+            position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+            rotation: { x: camera.rotation.x, y: camera.rotation.y },
+            worldTime: worldTime
+          });
         }
       }
+    };
+
+    const updatePlayerAnimations = (delta: number) => {
+      if (!isWorldReadyRef.current) return;
+
+      const vel = player.velocity.current;
+      const horizontalVelocityLength = Math.hypot(vel.x, vel.z);
+      const isFlying = player.isFlying?.current ?? false;
+      const walkingSpeed = (horizontalVelocityLength > 0.5 && !isFlying) ? horizontalVelocityLength : 0;
+
+      // Update third person model animation
+      thirdPersonModel.updateAnimation(walkingSpeed * 0.2, delta);
+
+      // Increment first-person walkTime manually to prevent updateAnimation's idle reset from zeroing out the arm rotation
+      if (walkingSpeed > 1) {
+        firstPersonModel.walkTime += delta * walkingSpeed * 2;
+        const swing = Math.sin(firstPersonModel.walkTime) * 0.05;
+        firstPersonArm.position.y = -0.7 + Math.abs(swing);
+        firstPersonArm.position.x = 0.48 + swing * 0.5;
+        firstPersonArm.rotation.x = 2.4 + (Math.sin(firstPersonModel.walkTime) * 0.1);
+      } else {
+        firstPersonArm.position.y = THREE.MathUtils.lerp(firstPersonArm.position.y, -0.7, 0.1);
+        firstPersonArm.position.x = THREE.MathUtils.lerp(firstPersonArm.position.x, 0.48, 0.1);
+        firstPersonArm.rotation.x = THREE.MathUtils.lerp(firstPersonArm.rotation.x, 2.4, 0.1);
+      }
+
+      if (isThirdPersonRef.current) {
+        firstPersonArm.visible = false;
+        thirdPersonModel.group.visible = true;
+
+        // Position body slightly lower so feet touch the ground (camera is at eye level)
+        thirdPersonModel.group.position.copy(camera.position);
+        thirdPersonModel.group.position.y -= 1.6;
+        // Only rotate horizontally
+        const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+        thirdPersonModel.group.rotation.set(0, euler.y + Math.PI, 0); // Model faces camera naturally, so add PI
+
+        // Move 3rd person camera behind player
+        const offset = new THREE.Vector3(0, 0, 4); // 4 blocks behind
+        offset.applyQuaternion(camera.quaternion);
+        thirdPersonCamera.position.copy(camera.position).add(offset);
+        thirdPersonCamera.quaternion.copy(camera.quaternion);
+      } else {
+        firstPersonArm.visible = true;
+        thirdPersonModel.group.visible = false;
+      }
+    };
+
+    const updateActiveGameplay = (time: number, delta: number) => {
+      // Run background simulation (20 Ticks Per Second)
+      if (time - lastSimulationTick.current > 50) {
+        const loadedChunks = Array.from(world.chunksDataRef.current.keys());
+        simulateRandomTicks(loadedChunks, world.chunksDataRef.current, world.addBlock);
+        lastSimulationTick.current = time;
+      }
+
+      if (isWorldReadyRef.current) {
+        player.update(delta, camera, controls);
+        updatePlayerAnimations(delta);
+      }
+
+      // Update Debug Coordinates
+      updateDebugUI(camera);
+
+      hoveredBlockRef.current = updateSelection(
+        camera,
+        world.chunksDataRef.current,
+        highlighter
+      );
+
+      // Standard FOV = 75, Sprinting FOV = 85
+      const targetFov = player.isSprinting.current ? 85 : 75;
+      if (Math.abs(camera.fov - targetFov) > 0.1) {
+        camera.fov += (targetFov - camera.fov) * delta * 8;
+        camera.updateProjectionMatrix();
+      }
+
+      // Advance time only when game is active
+      worldTime += delta * TIME_SPEED;
+    };
+
+    // 7. Animation Loop
+    let animationId: number;
+    const animate = () => {
+      animationId = requestAnimationFrame(animate);
+      const time = performance.now();
+
+      // FPS Capping Logic
+      const interval = 1000 / targetFpsRef.current;
+      const elapsed = time - lastRenderTime.current;
+
+      if (elapsed < interval) return;
+
+      // Update lastRenderTime to the start of this frame (with drift compensation)
+      lastRenderTime.current = time - (elapsed % interval);
+
+      const delta = Math.min((time - prevTime.current) / 1000, 0.1);
+
+      // FPS Tracking & position sync
+      updateFPSAndStats(time);
 
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in globalThis);
-      
+
       if (controls.isLocked || isMobile) {
-        // Run background simulation (20 Ticks Per Second)
-        if (time - lastSimulationTick.current > 50) {
-            const loadedChunks = Array.from(world.chunksDataRef.current.keys());
-            simulateRandomTicks(loadedChunks, world.chunksDataRef.current, world.addBlock);
-            lastSimulationTick.current = time;
-        }
-
-        // Delegate updates to specialized hooks
-        if (isWorldReadyRef.current) {
-          player.update(delta, camera, controls);
-          
-          // Animate Models based on horizontal velocity (X and Z) only to ignore falling/jumping
-          const vel = player.velocity.current;
-          const horizontalVelocityLength = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
-          const isFlying = player.isFlying?.current ?? false;
-          const walkingSpeed = (horizontalVelocityLength > 0.5 && !isFlying) ? horizontalVelocityLength : 0;
-          
-          // Update third person model animation
-          thirdPersonModel.updateAnimation(walkingSpeed * 0.2, delta);
-          
-          // Increment first-person walkTime manually to prevent updateAnimation's idle reset from zeroing out the arm rotation
-          if (walkingSpeed > 1) {
-              firstPersonModel.walkTime += delta * walkingSpeed * 2;
-              const swing = Math.sin(firstPersonModel.walkTime) * 0.05;
-              firstPersonArm.position.y = -0.7 + Math.abs(swing);
-              firstPersonArm.position.x = 0.48 + swing * 0.5;
-              firstPersonArm.rotation.x = 2.4 + (Math.sin(firstPersonModel.walkTime) * 0.1);
-          } else {
-              firstPersonArm.position.y = THREE.MathUtils.lerp(firstPersonArm.position.y, -0.7, 0.1);
-              firstPersonArm.position.x = THREE.MathUtils.lerp(firstPersonArm.position.x, 0.48, 0.1);
-              firstPersonArm.rotation.x = THREE.MathUtils.lerp(firstPersonArm.rotation.x, 2.4, 0.1);
-          }
-          
-          if (isThirdPersonRef.current) {
-              firstPersonArm.visible = false;
-              thirdPersonModel.group.visible = true;
-              
-              // Position body slightly lower so feet touch the ground (camera is at eye level)
-              thirdPersonModel.group.position.copy(camera.position);
-              thirdPersonModel.group.position.y -= 1.6;
-              // Only rotate horizontally
-              const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-              thirdPersonModel.group.rotation.set(0, euler.y + Math.PI, 0); // Model faces camera naturally, so add PI
-              
-              // Move 3rd person camera behind player
-              const offset = new THREE.Vector3(0, 0, 4); // 4 blocks behind
-              offset.applyQuaternion(camera.quaternion);
-              thirdPersonCamera.position.copy(camera.position).add(offset);
-              thirdPersonCamera.quaternion.copy(camera.quaternion);
-          } else {
-              firstPersonArm.visible = true;
-              thirdPersonModel.group.visible = false;
-          }
-        }
-        
-        // Update Debug Coordinates
-        updateDebugUI(camera);
-
-        hoveredBlockRef.current = updateSelection(
-          camera,
-          world.chunksDataRef.current,
-          highlighter
-        );
-
-        // Standard FOV = 75, Sprinting FOV = 85
-        const targetFov = player.isSprinting.current ? 85 : 75;
-        if (Math.abs(camera.fov - targetFov) > 0.1) {
-          camera.fov += (targetFov - camera.fov) * delta * 8;
-          camera.updateProjectionMatrix();
-        }
-
-        // Advance time only when game is active
-        worldTime += delta * TIME_SPEED;
+        updateActiveGameplay(time, delta);
       } else {
         highlighter.visible = false;
         hoveredBlockRef.current = null;
       }
-      
+
       // Manage chunks and update time/lighting even when unlocked/paused
       world.manageChunks(camera.position);
       updateLighting(scene, lightingSystem, worldTime, camera.position);
-      
+
       prevTime.current = time;
       renderer.render(scene, isThirdPersonRef.current ? thirdPersonCamera : camera);
     };
@@ -632,7 +644,7 @@ export const useMinecraft = ({
       world.chunksDataRef.current.clear();
       world.objectsRef.current = [];
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleMobileLook = useCallback((movementX: number, movementY: number) => {

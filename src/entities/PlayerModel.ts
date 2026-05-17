@@ -1,21 +1,21 @@
 import * as THREE from 'three';
 
 export class PlayerModel {
-    public group: THREE.Group;
-    public head: THREE.Mesh;
-    public body: THREE.Mesh;
-    public rightArm: THREE.Mesh;
-    public leftArm: THREE.Mesh;
-    public rightLeg: THREE.Mesh;
-    public leftLeg: THREE.Mesh;
+    public group!: THREE.Group;
+    public head!: THREE.Mesh;
+    public body!: THREE.Mesh;
+    public rightArm!: THREE.Mesh;
+    public leftArm!: THREE.Mesh;
+    public rightLeg!: THREE.Mesh;
+    public leftLeg!: THREE.Mesh;
 
     // Helper to animate the model
     public walkTime: number = 0;
     public isSlim: boolean = false;
 
     // Save helper variables
-    private baseMaterial: THREE.MeshLambertMaterial;
-    private layerMaterial: THREE.MeshLambertMaterial;
+    private readonly baseMaterial: THREE.MeshLambertMaterial;
+    private readonly layerMaterial: THREE.MeshLambertMaterial;
 
     constructor(skinTexture: THREE.Texture) {
         this.group = new THREE.Group();
