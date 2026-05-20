@@ -106,11 +106,13 @@ export const useWorld = ({
       for (let i = 0; i < 4; i++) {
         const worker = new ChunkWorker();
         worker.onmessage = (e) => {
-           const { response, chunkData, posArray, normArray, uvArray, texIndicesArray, indArray, colorArray } = e.data;
+           const { response, chunkData, posArray, normArray, uvArray, texIndicesArray, indArray, colorArray,
+                   waterPosArray, waterNormArray, waterUvArray, waterTexIndicesArray, waterIndArray, waterColorArray } = e.data;
            const taskId = response.taskId;
            const callback = workerCallbacksRef.current.get(taskId);
            if (callback) {
-               callback({ response, chunkData, posArray, normArray, uvArray, texIndicesArray, indArray, colorArray });
+               callback({ response, chunkData, posArray, normArray, uvArray, texIndicesArray, indArray, colorArray,
+                          waterPosArray, waterNormArray, waterUvArray, waterTexIndicesArray, waterIndArray, waterColorArray });
                workerCallbacksRef.current.delete(taskId);
            }
         };
@@ -174,58 +176,82 @@ export const useWorld = ({
          }
      });
 
-     const taskId = nextTaskIdRef.current++;
+      const taskId = nextTaskIdRef.current++;
 
-     workerCallbacksRef.current.set(taskId, ({ response, chunkData, posArray, normArray, uvArray, texIndicesArray, indArray, colorArray }) => {
-         if (targetChunksRef.current.get(chunkId) !== response.lodLevel) return;
+      workerCallbacksRef.current.set(taskId, ({ response, chunkData, posArray, normArray, uvArray, texIndicesArray, indArray, colorArray,
+                                               waterPosArray, waterNormArray, waterUvArray, waterTexIndicesArray, waterIndArray, waterColorArray }) => {
+          if (targetChunksRef.current.get(chunkId) !== response.lodLevel) return;
 
-         chunksDataRef.current.set(chunkId, chunkData);
+          chunksDataRef.current.set(chunkId, chunkData);
 
-         if (chunksDataRef.current.size >= 9 && !isReadyRef.current) {
-             isReadyRef.current = true;
-             onWorldReadyRef.current?.(chunksDataRef.current);
-         }
+          if (chunksDataRef.current.size >= 9 && !isReadyRef.current) {
+              isReadyRef.current = true;
+              onWorldReadyRef.current?.(chunksDataRef.current);
+          }
 
-         const unifiedMaterial = materialsRef.current?.[1];
-         if (!unifiedMaterial || posArray.length === 0) return;
+          const opaqueMaterial = materialsRef.current?.[1];
+          const waterMaterial = materialsRef.current?.[7];
+          if (!opaqueMaterial || !waterMaterial) return;
 
-         const chunkGroup = new THREE.Group();
-         chunkGroup.userData = { chunkId };
+          const chunkGroup = new THREE.Group();
+          chunkGroup.userData = { chunkId };
 
-         const geometry = new THREE.BufferGeometry();
-         geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-         geometry.setAttribute('normal', new THREE.BufferAttribute(normArray, 3));
-         geometry.setAttribute('uv', new THREE.BufferAttribute(uvArray, 2));
-         geometry.setAttribute('texIndex', new THREE.BufferAttribute(texIndicesArray, 1));
-         geometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
-         geometry.setIndex(new THREE.BufferAttribute(indArray, 1));
-         
-         geometry.computeBoundingSphere();
+          // Opaque Mesh
+          if (posArray.length > 0) {
+              const geometry = new THREE.BufferGeometry();
+              geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+              geometry.setAttribute('normal', new THREE.BufferAttribute(normArray, 3));
+              geometry.setAttribute('uv', new THREE.BufferAttribute(uvArray, 2));
+              geometry.setAttribute('texIndex', new THREE.BufferAttribute(texIndicesArray, 1));
+              geometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+              geometry.setIndex(new THREE.BufferAttribute(indArray, 1));
+              
+              geometry.computeBoundingSphere();
 
-         const mesh = new THREE.Mesh(geometry, unifiedMaterial);
+              const mesh = new THREE.Mesh(geometry, opaqueMaterial);
 
-         if (response.lodLevel === 0) {
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-         } else {
-            mesh.castShadow = false;
-            mesh.receiveShadow = false;
-         }
+              if (response.lodLevel === 0) {
+                 mesh.castShadow = true;
+                 mesh.receiveShadow = true;
+              } else {
+                 mesh.castShadow = false;
+                 mesh.receiveShadow = false;
+              }
 
-         chunkGroup.add(mesh);
+              chunkGroup.add(mesh);
+          }
 
-         const oldGroup = chunkMeshesRef.current.get(chunkId);
-         if (oldGroup) {
-            sceneRef.current?.remove(oldGroup);
-            oldGroup.children.forEach(child => {
-               if (child instanceof THREE.Mesh) child.geometry.dispose();
-            });
-         }
+          // Water Mesh
+          if (waterPosArray && waterPosArray.length > 0) {
+              const waterGeometry = new THREE.BufferGeometry();
+              waterGeometry.setAttribute('position', new THREE.BufferAttribute(waterPosArray, 3));
+              waterGeometry.setAttribute('normal', new THREE.BufferAttribute(waterNormArray, 3));
+              waterGeometry.setAttribute('uv', new THREE.BufferAttribute(waterUvArray, 2));
+              waterGeometry.setAttribute('texIndex', new THREE.BufferAttribute(waterTexIndicesArray, 1));
+              waterGeometry.setAttribute('color', new THREE.BufferAttribute(waterColorArray, 3));
+              waterGeometry.setIndex(new THREE.BufferAttribute(waterIndArray, 1));
+              
+              waterGeometry.computeBoundingSphere();
 
-         chunkMeshesRef.current.set(chunkId, chunkGroup);
-         sceneRef.current?.add(chunkGroup);
-         updateRaycastObjects();
-     });
+              const waterMesh = new THREE.Mesh(waterGeometry, waterMaterial);
+              waterMesh.castShadow = false;
+              waterMesh.receiveShadow = true;
+
+              chunkGroup.add(waterMesh);
+          }
+
+          const oldGroup = chunkMeshesRef.current.get(chunkId);
+          if (oldGroup) {
+             sceneRef.current?.remove(oldGroup);
+             oldGroup.children.forEach(child => {
+                if (child instanceof THREE.Mesh) child.geometry.dispose();
+             });
+          }
+
+          chunkMeshesRef.current.set(chunkId, chunkGroup);
+          sceneRef.current?.add(chunkGroup);
+          updateRaycastObjects();
+      });
 
      const worker = getAvailableWorker();
      if (worker) {
@@ -273,8 +299,9 @@ export const useWorld = ({
     }
 
     const chunkMesh = chunkMeshesRef.current.get(chunkId);
-    if (chunkMesh && blockGeometryRef.current && materialsRef.current?.[1]) {
-        const tempMesh = new THREE.Mesh(blockGeometryRef.current, materialsRef.current[1]);
+    const blockMaterial = materialsRef.current?.[type] || materialsRef.current?.[1];
+    if (chunkMesh && blockGeometryRef.current && blockMaterial) {
+        const tempMesh = new THREE.Mesh(blockGeometryRef.current, blockMaterial);
         tempMesh.position.set(rx, ry, rz);
         chunkMesh.add(tempMesh); 
     }
@@ -321,18 +348,22 @@ export const useWorld = ({
       rx: number, ry: number, rz: number,
       blockGeometry: THREE.BufferGeometry | null
   ) => {
-      if (!chunkMesh || !(chunkMesh.children[0] instanceof THREE.Mesh) || !blockGeometry) return;
+      if (!chunkMesh || !blockGeometry) return;
       
-      const geom = chunkMesh.children[0].geometry as THREE.BufferGeometry;
-      const pos = geom.attributes.position;
-      const norm = geom.attributes.normal;
-      
-      if (pos && norm) {
-          const arr = pos.array as Float32Array;
-          const nArr = norm.array as Float32Array;
-          const modified = removeBlockFaces(arr, nArr, rx, ry, rz);
-          if (modified) pos.needsUpdate = true;
-      }
+      chunkMesh.children.forEach(child => {
+          if (child instanceof THREE.Mesh && child.geometry instanceof THREE.BufferGeometry) {
+              const geom = child.geometry;
+              const pos = geom.attributes.position;
+              const norm = geom.attributes.normal;
+              
+              if (pos && norm) {
+                  const arr = pos.array as Float32Array;
+                  const nArr = norm.array as Float32Array;
+                  const modified = removeBlockFaces(arr, nArr, rx, ry, rz);
+                  if (modified) pos.needsUpdate = true;
+              }
+          }
+      });
       const fakeHoleMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.BackSide });
       const fakeHoleMesh = new THREE.Mesh(blockGeometry, fakeHoleMat);
       fakeHoleMesh.position.set(rx, ry, rz);

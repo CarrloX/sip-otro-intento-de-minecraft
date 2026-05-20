@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, Y_MIN, Y_MAX, CHUNK_VOLUME, getBlockIndex, noise, pseudoRandom, getTerrainType, setGlobalSeed } from '../services/WorldService';
+import { CHUNK_SIZE, Y_MIN, Y_MAX, CHUNK_VOLUME, getBlockIndex, noise, pseudoRandom, getTerrainType, setGlobalSeed, SEA_LEVEL } from '../services/WorldService';
 
 const getTexIndex = (blockType: number, face: string): number => {
     switch (blockType) {
@@ -15,6 +15,7 @@ const getTexIndex = (blockType: number, face: string): number => {
             return (face === 'front' || face === 'back') ? 4 : 3;
         case 5: return 5; // Leaves
         case 6: return 7; // Sand
+        case 7: return 8; // Water
         default: return 0;
     }
 };
@@ -42,6 +43,13 @@ class ChunkBuilder {
     private readonly texIndices: number[] = [];
     private readonly indices: number[] = [];
     private readonly colors: number[] = [];
+
+    private readonly waterPositions: number[] = [];
+    private readonly waterNormals: number[] = [];
+    private readonly waterUvs: number[] = [];
+    private readonly waterTexIndices: number[] = [];
+    private readonly waterIndices: number[] = [];
+    private readonly waterColors: number[] = [];
 
     private readonly lodLeft: number;
     private readonly lodRight: number;
@@ -102,6 +110,13 @@ class ChunkBuilder {
         const indArray = new Uint32Array(this.indices);
         const colorArray = new Float32Array(this.colors);
 
+        const waterPosArray = new Float32Array(this.waterPositions);
+        const waterNormArray = new Float32Array(this.waterNormals);
+        const waterUvArray = new Float32Array(this.waterUvs);
+        const waterTexIndicesArray = new Float32Array(this.waterTexIndices);
+        const waterIndArray = new Uint32Array(this.waterIndices);
+        const waterColorArray = new Float32Array(this.waterColors);
+
         const response = {
             cx: this.cx, cz: this.cz, lodLevel: this.lodLevel,
             taskId: this.taskId
@@ -110,7 +125,8 @@ class ChunkBuilder {
         return {
             response,
             chunkData: this.chunkData,
-            posArray, normArray, uvArray, texIndicesArray, indArray, colorArray
+            posArray, normArray, uvArray, texIndicesArray, indArray, colorArray,
+            waterPosArray, waterNormArray, waterUvArray, waterTexIndicesArray, waterIndArray, waterColorArray
         };
     }
 
@@ -126,6 +142,13 @@ class ChunkBuilder {
                     const idx = getPaddedIndex(lx, y, lz);
                     if (idx !== -1) {
                         this.paddedChunkData[idx] = getTerrainType(y, surfaceY);
+                    }
+                }
+
+                for (let y = surfaceY + 1; y <= SEA_LEVEL; y++) {
+                    const idx = getPaddedIndex(lx, y, lz);
+                    if (idx !== -1) {
+                        this.paddedChunkData[idx] = 7; // Water
                     }
                 }
             }
@@ -229,15 +252,17 @@ class ChunkBuilder {
 
                 if (pseudoRandom(gx, gz) < 0.02) {
                     const surfaceY = noise(gx, gz);
-                    const y = surfaceY + 1;
+                    if (surfaceY > SEA_LEVEL + 1) {
+                        const y = surfaceY + 1;
 
-                    const rand1 = pseudoRandom(gx * 1.3, gz * 1.7);
-                    const rand2 = pseudoRandom(gx * 2.1, gz * 0.9);
-                    const height = 4 + Math.floor(rand1 * 4);
-                    const shape = Math.floor(rand2 * 3);
+                        const rand1 = pseudoRandom(gx * 1.3, gz * 1.7);
+                        const rand2 = pseudoRandom(gx * 2.1, gz * 0.9);
+                        const height = 4 + Math.floor(rand1 * 4);
+                        const shape = Math.floor(rand2 * 3);
 
-                    this.generateTreeTrunk(lx, y, lz, height);
-                    this.generateTreeLeaves(gx, gz, lx, y, lz, height, shape);
+                        this.generateTreeTrunk(lx, y, lz, height);
+                        this.generateTreeLeaves(gx, gz, lx, y, lz, height, shape);
+                    }
                 }
             }
         }
@@ -278,13 +303,13 @@ class ChunkBuilder {
     }
 
     private isTransparent(type: number) {
-        return type === 0 || type === 5;
+        return type === 0 || type === 5 || type === 7;
     }
 
     private isSolid(lx: number, y: number, lz: number) {
         const type = this.getBlock(lx, y, lz);
-        if (this.effectiveFancyLeaves) return type !== 0 && type !== 5;
-        return type !== 0;
+        if (this.effectiveFancyLeaves) return type !== 0 && type !== 5 && type !== 7;
+        return type !== 0 && type !== 7;
     }
 
     private calculateHeightMap() {
@@ -325,8 +350,16 @@ class ChunkBuilder {
         const nIdx = getPaddedIndex(nx, ny, nz);
         if (nIdx !== -1 && this.isTransparent(this.paddedChunkData[nIdx])) {
             const currentL = this.lightMap[nIdx];
-            const diffuser = this.paddedChunkData[nIdx] === 5 ? 2 : 1;
-            const nextL = (dy === -1 && l === 15) ? 15 : l - diffuser;
+            const type = this.paddedChunkData[nIdx];
+            let diffuser = 1;
+            if (type === 5) diffuser = 2; // Leaves
+            if (type === 7) diffuser = 2; // Water
+
+            let nextL = l - diffuser;
+            if (dy === -1 && l === 15 && type === 0) {
+                nextL = 15; // Sunlight only propagates infinitely through air
+            }
+
             if (nextL > currentL) {
                 this.lightMap[nIdx] = nextL;
                 queue.push(nx, ny, nz, nextL);
@@ -392,7 +425,16 @@ class ChunkBuilder {
         const texIndex = getTexIndex(blockType, face);
         const u0 = 0, u1 = 1;
         const v0 = 0, v1 = 1;
-        const baseIndex = this.positions.length / 3;
+
+        const isWater = blockType === 7;
+        const targetPositions = isWater ? this.waterPositions : this.positions;
+        const targetNormals = isWater ? this.waterNormals : this.normals;
+        const targetUvs = isWater ? this.waterUvs : this.uvs;
+        const targetTexIndices = isWater ? this.waterTexIndices : this.texIndices;
+        const targetColors = isWater ? this.waterColors : this.colors;
+        const targetIndices = isWater ? this.waterIndices : this.indices;
+
+        const baseIndex = targetPositions.length / 3;
 
         let fx = lx, fy = y, fz = lz;
         if (face === 'top') fy++; else if (face === 'bottom') fy--;
@@ -409,54 +451,54 @@ class ChunkBuilder {
                 ao1 = this.vertexAO(this.isSolid(fx + 1, fy, fz), this.isSolid(fx, fy, fz + 1), this.isSolid(fx + 1, fy, fz + 1));
                 ao2 = this.vertexAO(this.isSolid(fx + 1, fy, fz), this.isSolid(fx, fy, fz - 1), this.isSolid(fx + 1, fy, fz - 1));
                 ao3 = this.vertexAO(this.isSolid(fx - 1, fy, fz), this.isSolid(fx, fy, fz - 1), this.isSolid(fx - 1, fy, fz - 1));
-                this.positions.push(gx - h, gy + h, gz + h, gx + h, gy + h, gz + h, gx + h, gy + h, gz - h, gx - h, gy + h, gz - h);
-                this.normals.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
-                this.uvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
+                targetPositions.push(gx - h, gy + h, gz + h, gx + h, gy + h, gz + h, gx + h, gy + h, gz - h, gx - h, gy + h, gz - h);
+                targetNormals.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
+                targetUvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
                 break;
             case 'bottom':
                 ao0 = this.vertexAO(this.isSolid(fx - 1, fy, fz), this.isSolid(fx, fy, fz - 1), this.isSolid(fx - 1, fy, fz - 1));
                 ao1 = this.vertexAO(this.isSolid(fx + 1, fy, fz), this.isSolid(fx, fy, fz - 1), this.isSolid(fx + 1, fy, fz - 1));
                 ao2 = this.vertexAO(this.isSolid(fx + 1, fy, fz), this.isSolid(fx, fy, fz + 1), this.isSolid(fx + 1, fy, fz + 1));
                 ao3 = this.vertexAO(this.isSolid(fx - 1, fy, fz), this.isSolid(fx, fy, fz + 1), this.isSolid(fx - 1, fy, fz + 1));
-                this.positions.push(gx - h, gy - h, gz - h, gx + h, gy - h, gz - h, gx + h, gy - h, gz + h, gx - h, gy - h, gz + h);
-                this.normals.push(0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0);
-                this.uvs.push(u0, v1, u1, v1, u1, v0, u0, v0);
+                targetPositions.push(gx - h, gy - h, gz - h, gx + h, gy - h, gz - h, gx + h, gy - h, gz + h, gx - h, gy - h, gz + h);
+                targetNormals.push(0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0);
+                targetUvs.push(u0, v1, u1, v1, u1, v0, u0, v0);
                 break;
             case 'right':
                 ao0 = this.vertexAO(this.isSolid(fx, fy - 1, fz), this.isSolid(fx, fy, fz + 1), this.isSolid(fx, fy - 1, fz + 1));
                 ao1 = this.vertexAO(this.isSolid(fx, fy - 1, fz), this.isSolid(fx, fy, fz - 1), this.isSolid(fx, fy - 1, fz - 1));
                 ao2 = this.vertexAO(this.isSolid(fx, fy + 1, fz), this.isSolid(fx, fy, fz - 1), this.isSolid(fx, fy + 1, fz - 1));
                 ao3 = this.vertexAO(this.isSolid(fx, fy + 1, fz), this.isSolid(fx, fy, fz + 1), this.isSolid(fx, fy + 1, fz + 1));
-                this.positions.push(gx + h, gy - h, gz + h, gx + h, gy - h, gz - h, gx + h, gy + h, gz - h, gx + h, gy + h, gz + h);
-                this.normals.push(1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0);
-                this.uvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
+                targetPositions.push(gx + h, gy - h, gz + h, gx + h, gy - h, gz - h, gx + h, gy + h, gz - h, gx + h, gy + h, gz + h);
+                targetNormals.push(1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0);
+                targetUvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
                 break;
             case 'left':
                 ao0 = this.vertexAO(this.isSolid(fx, fy - 1, fz), this.isSolid(fx, fy, fz - 1), this.isSolid(fx, fy - 1, fz - 1));
                 ao1 = this.vertexAO(this.isSolid(fx, fy - 1, fz), this.isSolid(fx, fy, fz + 1), this.isSolid(fx, fy - 1, fz + 1));
                 ao2 = this.vertexAO(this.isSolid(fx, fy + 1, fz), this.isSolid(fx, fy, fz + 1), this.isSolid(fx, fy + 1, fz + 1));
                 ao3 = this.vertexAO(this.isSolid(fx, fy + 1, fz), this.isSolid(fx, fy, fz - 1), this.isSolid(fx, fy + 1, fz - 1));
-                this.positions.push(gx - h, gy - h, gz - h, gx - h, gy - h, gz + h, gx - h, gy + h, gz + h, gx - h, gy + h, gz - h);
-                this.normals.push(-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0);
-                this.uvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
+                targetPositions.push(gx - h, gy - h, gz - h, gx - h, gy - h, gz + h, gx - h, gy + h, gz + h, gx - h, gy + h, gz - h);
+                targetNormals.push(-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0);
+                targetUvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
                 break;
             case 'front':
                 ao0 = this.vertexAO(this.isSolid(fx - 1, fy, fz), this.isSolid(fx, fy - 1, fz), this.isSolid(fx - 1, fy - 1, fz));
                 ao1 = this.vertexAO(this.isSolid(fx + 1, fy, fz), this.isSolid(fx, fy - 1, fz), this.isSolid(fx + 1, fy - 1, fz));
                 ao2 = this.vertexAO(this.isSolid(fx + 1, fy, fz), this.isSolid(fx, fy + 1, fz), this.isSolid(fx + 1, fy + 1, fz));
                 ao3 = this.vertexAO(this.isSolid(fx - 1, fy, fz), this.isSolid(fx, fy + 1, fz), this.isSolid(fx - 1, fy + 1, fz));
-                this.positions.push(gx - h, gy - h, gz + h, gx + h, gy - h, gz + h, gx + h, gy + h, gz + h, gx - h, gy + h, gz + h);
-                this.normals.push(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1);
-                this.uvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
+                targetPositions.push(gx - h, gy - h, gz + h, gx + h, gy - h, gz + h, gx + h, gy + h, gz + h, gx - h, gy + h, gz + h);
+                targetNormals.push(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1);
+                targetUvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
                 break;
             case 'back':
                 ao0 = this.vertexAO(this.isSolid(fx + 1, fy, fz), this.isSolid(fx, fy - 1, fz), this.isSolid(fx + 1, fy - 1, fz));
                 ao1 = this.vertexAO(this.isSolid(fx - 1, fy, fz), this.isSolid(fx, fy - 1, fz), this.isSolid(fx - 1, fy - 1, fz));
                 ao2 = this.vertexAO(this.isSolid(fx - 1, fy, fz), this.isSolid(fx, fy + 1, fz), this.isSolid(fx - 1, fy + 1, fz));
                 ao3 = this.vertexAO(this.isSolid(fx + 1, fy, fz), this.isSolid(fx, fy + 1, fz), this.isSolid(fx + 1, fy + 1, fz));
-                this.positions.push(gx + h, gy - h, gz - h, gx - h, gy - h, gz - h, gx - h, gy + h, gz - h, gx + h, gy + h, gz - h);
-                this.normals.push(0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1);
-                this.uvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
+                targetPositions.push(gx + h, gy - h, gz - h, gx - h, gy - h, gz - h, gx - h, gy + h, gz - h, gx + h, gy + h, gz - h);
+                targetNormals.push(0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1);
+                targetUvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
                 break;
         }
 
@@ -465,10 +507,10 @@ class ChunkBuilder {
         const m2 = l * this.getAoMultiplier(ao2);
         const m3 = l * this.getAoMultiplier(ao3);
 
-        this.colors.push(m0, m0, m0, m1, m1, m1, m2, m2, m2, m3, m3, m3);
-        this.texIndices.push(texIndex, texIndex, texIndex, texIndex);
+        targetColors.push(m0, m0, m0, m1, m1, m1, m2, m2, m2, m3, m3, m3);
+        targetTexIndices.push(texIndex, texIndex, texIndex, texIndex);
 
-        this.indices.push(
+        targetIndices.push(
             baseIndex + 0, baseIndex + 1, baseIndex + 2,
             baseIndex + 0, baseIndex + 2, baseIndex + 3
         );
@@ -476,6 +518,8 @@ class ChunkBuilder {
 
     private getLodVolumePrimaryType(lx: number, y: number, lz: number, step: number) {
         let hasLeaves = false;
+        let hasWater = false;
+        let solidType = 0;
         const volume = step * step * step;
 
         for (let i = 0; i < volume; i++) {
@@ -485,26 +529,33 @@ class ChunkBuilder {
             const dz = rem % step;
 
             const type = this.getBlock(lx + dx, y + (step - 1 - dy), lz + dz);
-            if (type !== 0 && type !== 5) return type;
-            if (type === 5) hasLeaves = true;
+            if (type === 7) hasWater = true;
+            else if (type === 5) hasLeaves = true;
+            else if (type !== 0 && solidType === 0) solidType = type;
         }
 
+        if (hasWater) return 7;
+        if (solidType !== 0) return solidType;
         return hasLeaves ? 5 : 0;
     }
 
     private shouldRenderFace(myType: number, neighborType: number, dir: string, lx: number, lz: number) {
+        if (myType === 7 && neighborType === 7) return false;
+
         if (dir === 'left' && lx === 0 && this.lodLeft !== this.lodLevel) return true;
         if (dir === 'right' && lx === CHUNK_SIZE - 1 && this.lodRight !== this.lodLevel) return true;
         if (dir === 'back' && lz === 0 && this.lodTop !== this.lodLevel) return true;
         if (dir === 'front' && lz === CHUNK_SIZE - 1 && this.lodBottom !== this.lodLevel) return true;
 
-        const isNeighborTransparent = neighborType === 0 || neighborType === 5;
+        const isNeighborTransparent = neighborType === 0 || neighborType === 5 || neighborType === 7;
         if (!isNeighborTransparent) return false;
         if (!this.effectiveFancyLeaves && myType === 5 && neighborType === 5) return false;
         return true;
     }
 
     private shouldRenderFaceLOD(myType: number, neighborType: number, dir: string, lx: number, lz: number, step: number) {
+        if (myType === 7 && neighborType === 7) return false;
+
         if (dir === 'left' && lx === 0 && this.lodLeft !== this.lodLevel) return true;
         if (dir === 'right' && lx === CHUNK_SIZE - step && this.lodRight !== this.lodLevel) return true;
         if (dir === 'back' && lz === 0 && this.lodTop !== this.lodLevel) return true;
@@ -513,6 +564,7 @@ class ChunkBuilder {
         if (neighborType === 0) return true;
         if (myType === 5 && neighborType === 5) return false;
         if (myType !== 5 && neighborType === 5) return true;
+        if (myType !== 7 && neighborType === 7) return true;
 
         return false;
     }
@@ -527,12 +579,24 @@ class ChunkBuilder {
     }
 
     private generateHighDetailMesh() {
+        // Pass 1: Opaque blocks
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
                 for (let y = Y_MAX; y >= Y_MIN; y--) {
                     const type = this.getBlock(lx, y, lz);
-                    if (type === 0) continue;
+                    if (type === 0 || type === 5 || type === 7) continue;
                     this.processHighDetailFaces(lx, y, lz, type);
+                }
+            }
+        }
+        // Pass 2: Transparent blocks
+        for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+            for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+                for (let y = Y_MAX; y >= Y_MIN; y--) {
+                    const type = this.getBlock(lx, y, lz);
+                    if (type === 5 || type === 7) {
+                        this.processHighDetailFaces(lx, y, lz, type);
+                    }
                 }
             }
         }
@@ -548,12 +612,24 @@ class ChunkBuilder {
     }
 
     private generateLODMesh(step: number) {
+        // Pass 1: Opaque blocks
         for (let lx = 0; lx < CHUNK_SIZE; lx += step) {
             for (let lz = 0; lz < CHUNK_SIZE; lz += step) {
                 for (let y = Y_MAX; y >= Y_MIN; y -= step) {
                     const type = this.getLodVolumePrimaryType(lx, y, lz, step);
-                    if (type === 0) continue;
+                    if (type === 0 || type === 5 || type === 7) continue;
                     this.processLODFaces(lx, y, lz, type, step);
+                }
+            }
+        }
+        // Pass 2: Transparent blocks
+        for (let lx = 0; lx < CHUNK_SIZE; lx += step) {
+            for (let lz = 0; lz < CHUNK_SIZE; lz += step) {
+                for (let y = Y_MAX; y >= Y_MIN; y -= step) {
+                    const type = this.getLodVolumePrimaryType(lx, y, lz, step);
+                    if (type === 5 || type === 7) {
+                        this.processLODFaces(lx, y, lz, type, step);
+                    }
                 }
             }
         }
@@ -593,7 +669,13 @@ globalThis.onmessage = (e) => {
             result.uvArray.buffer,
             result.texIndicesArray.buffer,
             result.indArray.buffer,
-            result.colorArray.buffer
+            result.colorArray.buffer,
+            result.waterPosArray.buffer,
+            result.waterNormArray.buffer,
+            result.waterUvArray.buffer,
+            result.waterTexIndicesArray.buffer,
+            result.waterIndArray.buffer,
+            result.waterColorArray.buffer
         ]
     });
 };

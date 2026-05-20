@@ -3,6 +3,7 @@ export const Y_MIN = -64;
 export const Y_MAX = 255;
 export const Y_HEIGHT = Y_MAX - Y_MIN + 1; // 320
 export const CHUNK_VOLUME = CHUNK_SIZE * CHUNK_SIZE * Y_HEIGHT; // 81920
+export const SEA_LEVEL = 12;
 
 export const getBlockIndex = (lx: number, y: number, lz: number): number => {
   const indexY = y - Y_MIN;
@@ -152,8 +153,14 @@ export const noise = (x: number, z: number) => {
 };
 
 export const getTerrainType = (y: number, surfaceY: number): number => {
-  if (y === surfaceY) return 1; // Grass
-  if (y > surfaceY - 3) return 2; // Dirt
+  if (y === surfaceY) {
+    if (y <= SEA_LEVEL + 1) return 6; // Sand near and under water
+    return 1; // Grass
+  }
+  if (y > surfaceY - 3) {
+    if (surfaceY <= SEA_LEVEL + 1) return 6; // Sand depth
+    return 2; // Dirt
+  }
   return 3; // Stone
 };
 
@@ -176,6 +183,12 @@ const generateBaseTerrain = (
             chunkData[idx] = getTerrainType(y, surfaceY);
         }
       }
+
+      // fill water
+      for (let y = surfaceY + 1; y <= SEA_LEVEL; y++) {
+        const idx = getBlockIndex(lx, y, lz);
+        if (idx !== -1) chunkData[idx] = 7; // Water
+      }
     }
   }
 };
@@ -194,7 +207,9 @@ const generateTrees = (
       
       if (pseudoRandom(gx, gz) < 0.02) {
         const surfaceY = noise(gx, gz);
-        generateTree(gx, gz, lx, surfaceY + 1, lz, chunkData);
+        if (surfaceY > SEA_LEVEL + 1) {
+            generateTree(gx, gz, lx, surfaceY + 1, lz, chunkData);
+        }
       }
     }
   }

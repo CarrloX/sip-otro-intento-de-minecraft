@@ -10,9 +10,9 @@ import type { SelectionResult } from '../services/SelectionService';
 import { usePlayer } from './usePlayer';
 import { useInteraction } from './useInteraction';
 import { useWorld } from './useWorld';
-import { commandService } from '../services/CommandService';
 import { getGlobalBlockType, Y_MIN, Y_MAX } from '../services/WorldService';
 import { simulateRandomTicks } from '../services/SimulationService';
+import { registerGameCommands } from '../services/GameCommandRegistrar';
 
 const findSafeSpawnY = (px: number, pz: number, chunksData: Map<string, Uint8Array>): number => {
   let safeY = 30; // Default fallback
@@ -398,80 +398,14 @@ export const useMinecraft = ({
     const highlighter = createHighlighter();
     scene.add(highlighter);
 
-    commandService.register('/time', (action?: string, value?: string) => {
-      if (action === 'set') {
-        if (value === 'day') {
-          worldTime = Math.PI / 4;
-          lastFpsUpdate.current = 0; // Force immediate save sync
-          if (cameraRef.current && onStatusChangeRef.current) {
-            onStatusChangeRef.current({
-              position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
-              rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
-              worldTime: worldTime
-            });
-          }
-          return 'Time set to day';
-        } else if (value === 'night') {
-          worldTime = Math.PI + Math.PI / 4;
-          lastFpsUpdate.current = 0; // Force immediate save sync
-          if (cameraRef.current && onStatusChangeRef.current) {
-            onStatusChangeRef.current({
-              position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
-              rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
-              worldTime: worldTime
-            });
-          }
-          return 'Time set to night';
-        }
-        return 'Usage: /time set <day|night>';
-      }
-      return 'Usage: /time set <day|night>';
-    });
-
-    commandService.register('/tp', (x?: string, y?: string, z?: string) => {
-      if (x !== undefined && y !== undefined && z !== undefined) {
-        const px = Number.parseFloat(x);
-        const py = Number.parseFloat(y);
-        const pz = Number.parseFloat(z);
-        if (!Number.isNaN(px) && !Number.isNaN(py) && !Number.isNaN(pz)) {
-          camera.position.set(px, py, pz);
-          lastFpsUpdate.current = 0; // Force immediate save sync
-          if (cameraRef.current && onStatusChangeRef.current) {
-            onStatusChangeRef.current({
-              position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
-              rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
-              worldTime: worldTime
-            });
-          }
-          return `Teleported to ${px} ${py} ${pz}`;
-        }
-      }
-      return 'Usage: /tp <x> <y> <z>';
-    });
-
-    commandService.register('/tick', (action?: string, value?: string) => {
-      if (action === 'advance') {
-        const steps = Number.parseInt(value || '100');
-        if (!Number.isNaN(steps) && steps > 0) {
-          const loadedChunks = Array.from(world.chunksDataRef.current.keys());
-          simulateRandomTicks(loadedChunks, world.chunksDataRef.current, world.addBlock, steps);
-
-          // Advance the visual time of day (1 tick = 0.05 seconds of delta time)
-          worldTime += steps * 0.05 * TIME_SPEED;
-          lastFpsUpdate.current = 0; // Force immediate save sync
-          if (cameraRef.current && onStatusChangeRef.current) {
-            onStatusChangeRef.current({
-              position: { x: cameraRef.current.position.x, y: cameraRef.current.position.y, z: cameraRef.current.position.z },
-              rotation: { x: cameraRef.current.rotation.x, y: cameraRef.current.rotation.y },
-              worldTime: worldTime
-            });
-          }
-
-          return `Advanced simulation by ${steps} ticks.`;
-        }
-        return 'Usage: /tick advance <amount>';
-      }
-      return 'Usage: /tick advance <amount>';
+    const unregisterCommands = registerGameCommands({
+      cameraRef,
+      setWorldTime: (time) => { worldTime = time; },
+      getWorldTime: () => worldTime,
+      lastFpsUpdate,
+      onStatusChangeRef,
+      world,
+      TIME_SPEED
     });
 
     const handleMouseDown = (e: MouseEvent) => interaction.handleMouseDown(e);
@@ -636,9 +570,7 @@ export const useMinecraft = ({
       document.removeEventListener('mousedown', handleMouseDown);
       controls.removeEventListener('lock', onLock);
       controls.removeEventListener('unlock', onUnlock);
-      commandService.unregister('/time');
-      commandService.unregister('/tp');
-      commandService.unregister('/tick');
+      unregisterCommands();
       renderer.dispose();
       renderer.domElement.remove();
       world.chunksDataRef.current.clear();

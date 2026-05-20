@@ -19,6 +19,7 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
     else if (actions.digit4) newType = 4;
     else if (actions.digit5) newType = 5;
     else if (actions.digit6) newType = 6;
+    else if (actions.digit7) newType = 7;
 
     if (newType !== -1 && newType !== currentBlockType) {
       setCurrentBlockType(newType);
@@ -36,8 +37,8 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
       
       setCurrentBlockType((prev) => {
         let next = prev + (e.deltaY > 0 ? 1 : -1);
-        if (next > 6) next = 1;
-        if (next < 1) next = 6;
+        if (next > 7) next = 1;
+        if (next < 1) next = 7;
         return next;
       });
     };
@@ -50,7 +51,7 @@ const Hotbar = ({ onBlockChange, isVisible }: HotbarProps) => {
 
   return (
     <div className="hotbar" id="hotbar">
-      {[1, 2, 3, 4, 5, 6].map((num) => (
+      {[1, 2, 3, 4, 5, 6, 7].map((num) => (
         <button
           key={num}
           type="button"

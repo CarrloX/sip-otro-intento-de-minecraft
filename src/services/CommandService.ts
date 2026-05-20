@@ -24,7 +24,7 @@ class CommandService {
 
     if (this.commands.has(base)) {
       const result = this.commands.get(base)!(...parts.slice(1));
-      return (result as string) || '';
+      return result || '';
     }
 
     if (base.startsWith('/')) {

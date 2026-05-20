@@ -38,11 +38,18 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
       for (let y = minY; y <= maxY; y++) {
         for (let z = minZ; z <= maxZ; z++) {
           const type = getGlobalBlockType(x, y, z, chunksDataRef.current);
-          if (type !== 0) return true; // Solid (non-air)
+          if (type !== 0 && type !== 7) return true; // Solid (non-air and non-water)
         }
       }
     }
     return false;
+  }, [chunksDataRef]);
+
+  const checkWater = useCallback((pos: THREE.Vector3) => {
+    if (!chunksDataRef.current) return false;
+    const type = getGlobalBlockType(Math.round(pos.x), Math.round(pos.y - 1), Math.round(pos.z), chunksDataRef.current);
+    const headType = getGlobalBlockType(Math.round(pos.x), Math.round(pos.y), Math.round(pos.z), chunksDataRef.current);
+    return type === 7 || headType === 7;
   }, [chunksDataRef]);
 
   const checkAxisCollision = useCallback((camera: THREE.PerspectiveCamera, axis: 'x' | 'z', delta: number, originalPos: THREE.Vector3, isCrouching: boolean) => {
@@ -63,12 +70,20 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     return false;
   }, [checkCollision]);
 
-  const applyVerticalForces = useCallback((actions: Record<string, boolean>, isSprinting: boolean, isFlying: boolean) => {
+  const applyVerticalForces = useCallback((actions: Record<string, boolean>, isSprinting: boolean, isFlying: boolean, inWater: boolean) => {
     if (isFlying) {
       const flySpeed = 50;
       const verticalMove = (actions.jump ? 1 : 0) - (actions.down ? 1 : 0);
       velocity.current.y += verticalMove * flySpeed * PHYSICS_STEP;
       velocity.current.y -= velocity.current.y * 5 * PHYSICS_STEP;
+    } else if (inWater) {
+      if (actions.jump) {
+        velocity.current.y += 20 * PHYSICS_STEP; // Swim up
+      } else {
+        velocity.current.y -= 9.8 * 0.5 * PHYSICS_STEP; // Sink slowly
+      }
+      velocity.current.y -= velocity.current.y * 5 * PHYSICS_STEP; // Water drag
+      canJump.current = true;
     } else {
       if (actions.jump && canJump.current) {
         velocity.current.y += isSprinting ? 8.8 : 8;
@@ -103,7 +118,7 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
       }
   }, [checkCollision]);
 
-  const applyHorizontalForces = useCallback((isSprinting: boolean, isFlying: boolean, isCrouching: boolean) => {
+  const applyHorizontalForces = useCallback((isSprinting: boolean, isFlying: boolean, isCrouching: boolean, inWater: boolean) => {
     velocity.current.x -= velocity.current.x * 10 * PHYSICS_STEP;
     velocity.current.z -= velocity.current.z * 10 * PHYSICS_STEP;
 
@@ -117,6 +132,8 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     if (isFlying) {
       baseSpeed = 60;
       multiplier = isSprinting ? 3 : 1;
+    } else if (inWater) {
+      multiplier = 0.5;
     } else if (isSprinting) {
       multiplier = 1.3;
     } else if (isCrouching) {
@@ -170,21 +187,18 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
     }
   }, [checkCollision, autoJumpEnabledRef, checkAxisCollision]);
 
-  /**
-   * Handles a single 1/60s physics tick.
-   * Cognitive Complexity now reduced below threshold
-   */
   const applyPhysicsStep = useCallback((actions: Record<string, boolean>, camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
     const isFlying = actions.isFlying;
     const isCrouching = actions.down && !isFlying;
     const isSprinting = actions.sprint && moveForward.current && !isCrouching;
+    const inWater = checkWater(camera.position);
 
     resolveCrouching(actions, camera, isFlying);
-    applyVerticalForces(actions, isSprinting, isFlying);
-    applyHorizontalForces(isSprinting, isFlying, isCrouching);
+    applyVerticalForces(actions, isSprinting, isFlying, inWater);
+    applyHorizontalForces(isSprinting, isFlying, isCrouching, inWater);
     resolveVerticalCollision(camera);
     resolveHorizontalCollision(camera, controls, isCrouching);
-  }, [applyVerticalForces, applyHorizontalForces, resolveVerticalCollision, resolveHorizontalCollision, resolveCrouching]);
+  }, [applyVerticalForces, applyHorizontalForces, resolveVerticalCollision, resolveHorizontalCollision, resolveCrouching, checkWater]);
 
   const update = useCallback((delta: number, camera: THREE.PerspectiveCamera, controls: PointerLockControls) => {
     if (!controls.isLocked) return;

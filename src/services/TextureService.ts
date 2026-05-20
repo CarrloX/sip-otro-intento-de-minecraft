@@ -8,7 +8,8 @@ const TEXTURE_PARAMS: Record<string, { r: number, g: number, b: number, v: numbe
     'wood_top': { r: 175, g: 150, b: 110, v: 10 },
     'leaves': { r: 59, g: 122, b: 45, v: 20 },
     'grass_side': { r: 121, g: 85, b: 58, v: 10 },
-    'sand': { r: 219, g: 209, b: 160, v: 8 }
+    'sand': { r: 219, g: 209, b: 160, v: 8 },
+    'water': { r: 35, g: 110, b: 200, v: 5 }
 };
 
 const getDirtPixel = (x: number, y: number, noiseGrid: Float32Array, r: number, g: number, b: number) => {
@@ -135,12 +136,14 @@ const getGenericPixel = (type: string, x: number, y: number, noiseGrid: Float32A
     if (type === 'leaves') {
         if (noise < 0.3) alpha = 0;
         else if (noise < 0.5) { modR *= 0.5; modG *= 0.5; modB *= 0.5; }
+    } else if (type === 'water') {
+        alpha = 160;
     }
     return { r: modR, g: modG, b: modB, a: alpha };
 };
 
 export const generateTextureArray = (enableMipmapping: boolean = true) => {
-  const types = ['dirt', 'grass_top', 'stone', 'wood_side', 'wood_top', 'leaves', 'grass_side', 'sand'];
+  const types = ['dirt', 'grass_top', 'stone', 'wood_side', 'wood_top', 'leaves', 'grass_side', 'sand', 'water'];
   const width = 16;
   const height = 16;
   const depth = types.length;
@@ -195,9 +198,8 @@ export const generateTextureArray = (enableMipmapping: boolean = true) => {
   return texture;
 };
 
-export const createUnifiedMaterial = (enableMipmapping: boolean = true) => {
-  const arrayTexture = generateTextureArray(enableMipmapping);
-  
+export const createOpaqueMaterial = (enableMipmapping: boolean = true, arrayTexture?: THREE.DataArrayTexture) => {
+  const tex = arrayTexture || generateTextureArray(enableMipmapping);
   const material = new THREE.MeshLambertMaterial({ 
      vertexColors: true,
      alphaTest: 0.5,
@@ -207,7 +209,51 @@ export const createUnifiedMaterial = (enableMipmapping: boolean = true) => {
   material.defines = { USE_UV: "" };
 
   material.onBeforeCompile = (shader) => {
-      shader.uniforms.mapArray = { value: arrayTexture };
+      shader.uniforms.mapArray = { value: tex };
+
+      shader.vertexShader = `
+          attribute float texIndex;
+          varying float vTexIndex;
+          ${shader.vertexShader}
+      `;
+      shader.vertexShader = shader.vertexShader.replace(
+          '#include <uv_vertex>',
+          `
+          #include <uv_vertex>
+          vTexIndex = texIndex;
+          `
+      );
+
+      shader.fragmentShader = `
+          uniform highp sampler2DArray mapArray;
+          varying float vTexIndex;
+          ${shader.fragmentShader}
+      `;
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `
+          vec4 texColor = texture(mapArray, vec3(vUv, vTexIndex));
+          diffuseColor *= texColor;
+          `
+      );
+  };
+
+  return material;
+};
+
+export const createWaterMaterial = (enableMipmapping: boolean = true, arrayTexture?: THREE.DataArrayTexture) => {
+  const tex = arrayTexture || generateTextureArray(enableMipmapping);
+  const material = new THREE.MeshLambertMaterial({ 
+     vertexColors: true,
+     transparent: true,
+     depthWrite: true
+  });
+
+  material.defines = { USE_UV: "" };
+
+  material.onBeforeCompile = (shader) => {
+      shader.uniforms.mapArray = { value: tex };
 
       shader.vertexShader = `
           attribute float texIndex;
@@ -242,16 +288,20 @@ export const createUnifiedMaterial = (enableMipmapping: boolean = true) => {
 
 // Return Record with all IDs pointing to isolated material for backwards compatibility in GameCanvas
 export const createMaterials = (enableMipmapping: boolean = true) => {
-  const unifiedMaterial = createUnifiedMaterial(enableMipmapping);
+  const arrayTexture = generateTextureArray(enableMipmapping);
+  const opaqueMaterial = createOpaqueMaterial(enableMipmapping, arrayTexture);
+  const waterMaterial = createWaterMaterial(enableMipmapping, arrayTexture);
+
   const materials: Record<number, THREE.Material | THREE.Material[]> = {};
-  materials[1] = unifiedMaterial;
-  materials[2] = unifiedMaterial;
-  materials[3] = unifiedMaterial;
-  materials[4] = unifiedMaterial;
-  materials[5] = unifiedMaterial;
-  materials[6] = unifiedMaterial;
-  materials[8] = unifiedMaterial; // Log X-axis
-  materials[9] = unifiedMaterial; // Log Z-axis
+  materials[1] = opaqueMaterial; // Grass
+  materials[2] = opaqueMaterial; // Dirt
+  materials[3] = opaqueMaterial; // Stone
+  materials[4] = opaqueMaterial; // Log
+  materials[5] = opaqueMaterial; // Leaves
+  materials[6] = opaqueMaterial; // Sand
+  materials[7] = waterMaterial;  // Water
+  materials[8] = opaqueMaterial; // Log X-axis
+  materials[9] = opaqueMaterial; // Log Z-axis
   return materials;
 };
 
