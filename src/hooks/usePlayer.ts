@@ -76,7 +76,10 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
       const verticalMove = (actions.jump ? 1 : 0) - (actions.down ? 1 : 0);
       velocity.current.y += verticalMove * flySpeed * PHYSICS_STEP;
       velocity.current.y -= velocity.current.y * 5 * PHYSICS_STEP;
-    } else if (inWater) {
+      return;
+    }
+
+    if (inWater) {
       if (actions.jump) {
         velocity.current.y += 20 * PHYSICS_STEP; // Swim up
       } else {
@@ -84,13 +87,14 @@ export const usePlayer = (chunksDataRef: React.RefObject<Map<string, Uint8Array>
       }
       velocity.current.y -= velocity.current.y * 5 * PHYSICS_STEP; // Water drag
       canJump.current = true;
-    } else {
-      if (actions.jump && canJump.current) {
-        velocity.current.y += isSprinting ? 8.8 : 8;
-        canJump.current = false;
-      }
-      velocity.current.y -= 9.8 * 3 * PHYSICS_STEP;
+      return;
     }
+
+    if (actions.jump && canJump.current) {
+      velocity.current.y += isSprinting ? 8.8 : 8;
+      canJump.current = false;
+    }
+    velocity.current.y -= 9.8 * 3 * PHYSICS_STEP;
   }, []);
 
   const resolveCrouching = useCallback((actions: Record<string, boolean>, camera: THREE.PerspectiveCamera, isFlying: boolean) => {

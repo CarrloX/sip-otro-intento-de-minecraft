@@ -130,27 +130,29 @@ class ChunkBuilder {
         };
     }
 
+    private generatePaddedColumn(lx: number, lz: number, gx: number, gz: number) {
+        const surfaceY = noise(gx, gz);
+
+        const depth = 64;
+        for (let y = surfaceY; y >= surfaceY - depth; y--) {
+            const idx = getPaddedIndex(lx, y, lz);
+            if (idx !== -1) {
+                this.paddedChunkData[idx] = getTerrainType(y, surfaceY);
+            }
+        }
+
+        for (let y = surfaceY + 1; y <= SEA_LEVEL; y++) {
+            const idx = getPaddedIndex(lx, y, lz);
+            if (idx !== -1) {
+                this.paddedChunkData[idx] = 7; // Water
+            }
+        }
+    }
+
     private generatePaddedTerrain(startX: number, startZ: number) {
         for (let lx = -PAD; lx < CHUNK_SIZE + PAD; lx++) {
             for (let lz = -PAD; lz < CHUNK_SIZE + PAD; lz++) {
-                const gx = startX + lx;
-                const gz = startZ + lz;
-                const surfaceY = noise(gx, gz);
-
-                const depth = 64;
-                for (let y = surfaceY; y >= surfaceY - depth; y--) {
-                    const idx = getPaddedIndex(lx, y, lz);
-                    if (idx !== -1) {
-                        this.paddedChunkData[idx] = getTerrainType(y, surfaceY);
-                    }
-                }
-
-                for (let y = surfaceY + 1; y <= SEA_LEVEL; y++) {
-                    const idx = getPaddedIndex(lx, y, lz);
-                    if (idx !== -1) {
-                        this.paddedChunkData[idx] = 7; // Water
-                    }
-                }
+                this.generatePaddedColumn(lx, lz, startX + lx, startZ + lz);
             }
         }
     }
@@ -539,13 +541,18 @@ class ChunkBuilder {
         return hasLeaves ? 5 : 0;
     }
 
+    private isLODBoundary(dir: string, lx: number, lz: number, step: number): boolean {
+        if (dir === 'left') return lx === 0 && this.lodLeft !== this.lodLevel;
+        if (dir === 'right') return lx === CHUNK_SIZE - step && this.lodRight !== this.lodLevel;
+        if (dir === 'back') return lz === 0 && this.lodTop !== this.lodLevel;
+        if (dir === 'front') return lz === CHUNK_SIZE - step && this.lodBottom !== this.lodLevel;
+        return false;
+    }
+
     private shouldRenderFace(myType: number, neighborType: number, dir: string, lx: number, lz: number) {
         if (myType === 7 && neighborType === 7) return false;
 
-        if (dir === 'left' && lx === 0 && this.lodLeft !== this.lodLevel) return true;
-        if (dir === 'right' && lx === CHUNK_SIZE - 1 && this.lodRight !== this.lodLevel) return true;
-        if (dir === 'back' && lz === 0 && this.lodTop !== this.lodLevel) return true;
-        if (dir === 'front' && lz === CHUNK_SIZE - 1 && this.lodBottom !== this.lodLevel) return true;
+        if (this.isLODBoundary(dir, lx, lz, 1)) return true;
 
         const isNeighborTransparent = neighborType === 0 || neighborType === 5 || neighborType === 7;
         if (!isNeighborTransparent) return false;
@@ -556,10 +563,7 @@ class ChunkBuilder {
     private shouldRenderFaceLOD(myType: number, neighborType: number, dir: string, lx: number, lz: number, step: number) {
         if (myType === 7 && neighborType === 7) return false;
 
-        if (dir === 'left' && lx === 0 && this.lodLeft !== this.lodLevel) return true;
-        if (dir === 'right' && lx === CHUNK_SIZE - step && this.lodRight !== this.lodLevel) return true;
-        if (dir === 'back' && lz === 0 && this.lodTop !== this.lodLevel) return true;
-        if (dir === 'front' && lz === CHUNK_SIZE - step && this.lodBottom !== this.lodLevel) return true;
+        if (this.isLODBoundary(dir, lx, lz, step)) return true;
 
         if (neighborType === 0) return true;
         if (myType === 5 && neighborType === 5) return false;
@@ -578,8 +582,7 @@ class ChunkBuilder {
         if (this.shouldRenderFace(type, this.getBlock(lx, y, lz - 1), 'back', lx, lz)) this.pushQuadWithAO(lx, y, lz, type, 'back');
     }
 
-    private generateHighDetailMesh() {
-        // Pass 1: Opaque blocks
+    private generateHighDetailOpaqueMesh() {
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
                 for (let y = Y_MAX; y >= Y_MIN; y--) {
@@ -589,7 +592,9 @@ class ChunkBuilder {
                 }
             }
         }
-        // Pass 2: Transparent blocks
+    }
+
+    private generateHighDetailTransparentMesh() {
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
                 for (let y = Y_MAX; y >= Y_MIN; y--) {
@@ -602,6 +607,13 @@ class ChunkBuilder {
         }
     }
 
+    private generateHighDetailMesh() {
+        // Pass 1: Opaque blocks
+        this.generateHighDetailOpaqueMesh();
+        // Pass 2: Transparent blocks
+        this.generateHighDetailTransparentMesh();
+    }
+
     private processLODFaces(lx: number, y: number, lz: number, type: number, step: number) {
         if (this.shouldRenderFaceLOD(type, this.getLodVolumePrimaryType(lx, y + step, lz, step), 'top', lx, lz, step)) this.pushQuadWithAO(lx, y, lz, type, 'top');
         if (this.shouldRenderFaceLOD(type, this.getLodVolumePrimaryType(lx, y - step, lz, step), 'bottom', lx, lz, step)) this.pushQuadWithAO(lx, y, lz, type, 'bottom');
@@ -611,8 +623,7 @@ class ChunkBuilder {
         if (this.shouldRenderFaceLOD(type, this.getLodVolumePrimaryType(lx, y, lz - step, step), 'back', lx, lz, step)) this.pushQuadWithAO(lx, y, lz, type, 'back');
     }
 
-    private generateLODMesh(step: number) {
-        // Pass 1: Opaque blocks
+    private generateLODOpaqueMesh(step: number) {
         for (let lx = 0; lx < CHUNK_SIZE; lx += step) {
             for (let lz = 0; lz < CHUNK_SIZE; lz += step) {
                 for (let y = Y_MAX; y >= Y_MIN; y -= step) {
@@ -622,7 +633,9 @@ class ChunkBuilder {
                 }
             }
         }
-        // Pass 2: Transparent blocks
+    }
+
+    private generateLODTransparentMesh(step: number) {
         for (let lx = 0; lx < CHUNK_SIZE; lx += step) {
             for (let lz = 0; lz < CHUNK_SIZE; lz += step) {
                 for (let y = Y_MAX; y >= Y_MIN; y -= step) {
@@ -633,6 +646,13 @@ class ChunkBuilder {
                 }
             }
         }
+    }
+
+    private generateLODMesh(step: number) {
+        // Pass 1: Opaque blocks
+        this.generateLODOpaqueMesh(step);
+        // Pass 2: Transparent blocks
+        this.generateLODTransparentMesh(step);
     }
 
     private generateMesh() {
